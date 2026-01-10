@@ -1,0 +1,59 @@
+spring:
+  application:
+    name: ops-hub-api
+  
+  # Database Configuration - MS SQL Server
+  datasource:
+    url: jdbc:sqlserver://localhost;instanceName=SQLSERVER1;databaseName=ops_hub;encrypt=true;trustServerCertificate=true
+    username: ${DB_USERNAME:sa}
+    password: ${DB_PASSWORD:avastino}
+    driver-class-name: com.microsoft.sqlserver.jdbc.SQLServerDriver
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 5
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+  
+  # JPA/Hibernate Configuration
+  jpa:
+    hibernate:
+      ddl-auto: update # Automatically creates/updates database schema
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.SQLServerDialect
+        format_sql: true
+        use_sql_comments: true
+        jdbc:
+          batch_size: 20
+        order_inserts: true
+        order_updates: true
+    # Allow application to start even if database is not available (for testing)
+    database-platform: org.hibernate.dialect.SQLServerDialect
+  # Allow startup even if datasource initialization fails
+  sql:
+    init:
+      mode: never
+
+# Server Configuration
+server:
+  port: 8080
+  servlet:
+    context-path: /api
+
+# Actuator Configuration
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: when-authorized
+
+# Application Configuration
+app:
+  name: Ops Hub API
+  version: 0.0.1-SNAPSHOT
+  description: Enterprise-grade operations dashboard backend API
