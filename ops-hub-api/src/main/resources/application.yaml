@@ -57,3 +57,8 @@ app:
   name: Ops Hub API
   version: 0.0.1-SNAPSHOT
   description: Enterprise-grade operations dashboard backend API
+  jwt:
+    secret: ${JWT_SECRET:your-256-bit-secret-key-change-this-in-production-minimum-32-characters-long}
+    expiration: 86400000 # 24 hours in milliseconds
+  encryption:
+    secret: ${ENCRYPTION_SECRET:ChangeThisEncryptionKeyInProduction123456}

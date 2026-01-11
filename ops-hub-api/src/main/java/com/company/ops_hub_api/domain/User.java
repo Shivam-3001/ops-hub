@@ -22,17 +22,33 @@ public class User {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @Column(nullable = false, unique = true, length = 50, name = "employee_id")
+    private String employeeId; // Custom employee/user ID for login
+
     @Column(nullable = false, unique = true, length = 100)
     private String username;
 
     @Column(nullable = false, length = 255)
-    private String email;
+    private String passwordHash; // BCrypt hashed password
 
     @Column(nullable = false, length = 255)
-    private String passwordHash;
+    private String email;
+
+    @Column(length = 100)
+    private String fullName;
+
+    @Column(length = 20)
+    private String phone;
+
+    @Column(nullable = false, length = 50, name = "user_type")
+    private String userType; // AREA_LEAD, ZONE_LEAD, CIRCLE_LEAD, CLUSTER_LEAD, ANALYST, ADMIN, etc.
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "area_id", nullable = false)
+    private Area area;
 
     @Column(nullable = false, length = 50)
-    private String role = "ANALYST"; // ADMIN, MANAGER, ANALYST
+    private String role = "ANALYST"; // ADMIN, MANAGER, ANALYST (for access control)
 
     @Column(nullable = false)
     private Boolean active = true;
