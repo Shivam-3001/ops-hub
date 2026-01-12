@@ -31,7 +31,9 @@ public class SecurityConfig {
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/actuator/**").permitAll()
                 .requestMatchers("/auth/**").permitAll()
-                .requestMatchers("/filters/**").permitAll() // Allow filter endpoints for frontend
+                .requestMatchers("/api/filters/**").permitAll() // Allow filter endpoints for frontend
+                .requestMatchers("/payments/callback").permitAll() // Payment gateway callbacks (should be secured with signature verification)
+                .requestMatchers("/permissions/me").authenticated() // Allow users to check their own permissions
                 .requestMatchers("/error").permitAll()
                 .anyRequest().authenticated()
             )

@@ -62,3 +62,5 @@ app:
     expiration: 86400000 # 24 hours in milliseconds
   encryption:
     secret: ${ENCRYPTION_SECRET:ChangeThisEncryptionKeyInProduction123456}
+  visits:
+    prevent-duplicate-per-day: ${PREVENT_DUPLICATE_VISITS:true} # Prevent duplicate visits for same customer on same day
