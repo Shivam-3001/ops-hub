@@ -190,4 +190,81 @@ public class DataSeederService {
         
         return userRepository.save(user);
     }
+
+    /**
+     * Seed users only (useful when clusters exist but users don't)
+     */
+    @Transactional
+    public void seedUsersOnly() {
+        log.info("Starting user-only seeding...");
+        
+        // Check if users already exist
+        if (userRepository.count() > 0) {
+            log.info("Users already exist. Skipping user seeding.");
+            return;
+        }
+
+        // Find or create required areas (we need at least one area for users)
+        Area behrampurArea = areaRepository.findByCode("BHR")
+                .orElseGet(() -> {
+                    // If area doesn't exist, we need to create the hierarchy
+                    log.warn("Required area 'BHR' not found. Creating minimal hierarchy...");
+                    
+                    // Find or create cluster
+                    Cluster bupCluster = clusterRepository.findByCode("BUP")
+                            .orElseGet(() -> createCluster("BUP", "Bihar UP"));
+                    
+                    // Find or create circle
+                    Circle upCircle = circleRepository.findByCode("UP")
+                            .orElseGet(() -> createCircle("UP", "Uttar Pradesh", bupCluster));
+                    
+                    // Find or create zone
+                    Zone ghaziabadZone = zoneRepository.findByCode("GZB")
+                            .orElseGet(() -> createZone("GZB", "Ghaziabad", upCircle));
+                    
+                    // Create area
+                    return createArea("BHR", "Behrampur", ghaziabadZone);
+                });
+
+        Area meerutArea = areaRepository.findByCode("MRT")
+                .orElseGet(() -> {
+                    Zone ghaziabadZone = zoneRepository.findByCode("GZB")
+                            .orElseGet(() -> {
+                                Cluster bupCluster = clusterRepository.findByCode("BUP")
+                                        .orElseGet(() -> createCluster("BUP", "Bihar UP"));
+                                Circle upCircle = circleRepository.findByCode("UP")
+                                        .orElseGet(() -> createCircle("UP", "Uttar Pradesh", bupCluster));
+                                return createZone("GZB", "Ghaziabad", upCircle);
+                            });
+                    return createArea("MRT", "Meerut", ghaziabadZone);
+                });
+
+        // Create Users with Test Credentials
+        createTestUser("EMP001", "shivam", "Shivam Kumar", "shivam@example.com", 
+                "9876543210", "AREA_LEAD", "MANAGER", behrampurArea, "password123", true);
+        
+        createTestUser("EMP002", "rahul", "Rahul Sharma", "rahul@example.com", 
+                "9876543211", "ZONE_LEAD", "MANAGER", behrampurArea, "password123", true);
+        
+        createTestUser("EMP003", "priya", "Priya Singh", "priya@example.com", 
+                "9876543212", "CIRCLE_LEAD", "MANAGER", behrampurArea, "password123", true);
+        
+        createTestUser("EMP004", "admin", "Admin User", "admin@example.com", 
+                "9876543213", "ADMIN", "ADMIN", behrampurArea, "admin123", true);
+        
+        createTestUser("EMP005", "analyst1", "Analyst One", "analyst1@example.com", 
+                "9876543214", "ANALYST", "ANALYST", meerutArea, "password123", true);
+        
+        createTestUser("EMP006", "manager1", "Manager One", "manager1@example.com", 
+                "9876543215", "ZONE_LEAD", "MANAGER", meerutArea, "password123", true);
+
+        log.info("User seeding completed successfully!");
+        log.info("Test Credentials:");
+        log.info("  Employee ID: EMP001, Password: password123 (Area Lead)");
+        log.info("  Employee ID: EMP002, Password: password123 (Zone Lead)");
+        log.info("  Employee ID: EMP003, Password: password123 (Circle Lead)");
+        log.info("  Employee ID: EMP004, Password: admin123 (Admin)");
+        log.info("  Employee ID: EMP005, Password: password123 (Analyst)");
+        log.info("  Employee ID: EMP006, Password: password123 (Zone Lead)");
+    }
 }

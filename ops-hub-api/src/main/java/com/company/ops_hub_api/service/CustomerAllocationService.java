@@ -34,6 +34,7 @@ public class CustomerAllocationService {
     private final UserRepository userRepository;
     private final UserRoleRepository userRoleRepository;
     private final AuditLogService auditLogService;
+    private final EmailNotificationService emailNotificationService;
 
     /**
      * Allocate a customer to a user
@@ -103,6 +104,22 @@ public class CustomerAllocationService {
         if (allocationId != null) {
             auditLogService.logAction("CREATE", "CUSTOMER_ALLOCATION", allocationId, 
                     null, newValues, httpRequest);
+        }
+        
+        // Send email notification
+        try {
+            String userName = assignee.getFullName() != null ? assignee.getFullName() : assignee.getUsername();
+            String customerName = buildCustomerName(customer);
+            
+            emailNotificationService.sendCustomerAllocatedNotification(
+                    assignee.getEmail(),
+                    userName,
+                    customerName,
+                    customer.getCustomerCode(),
+                    dto.getRoleCode()
+            );
+        } catch (Exception e) {
+            log.error("Error sending customer allocation email notification", e);
         }
         
         log.info("Customer {} allocated to user {} by {}", 
@@ -311,5 +328,21 @@ public class CustomerAllocationService {
         }
         return userRepository.findById(userId)
                 .orElseThrow(() -> new IllegalArgumentException("User not found"));
+    }
+
+    private String buildCustomerName(Customer customer) {
+        StringBuilder name = new StringBuilder();
+        if (customer.getFirstName() != null) {
+            name.append(customer.getFirstName());
+        }
+        if (customer.getMiddleName() != null) {
+            if (name.length() > 0) name.append(" ");
+            name.append(customer.getMiddleName());
+        }
+        if (customer.getLastName() != null) {
+            if (name.length() > 0) name.append(" ");
+            name.append(customer.getLastName());
+        }
+        return name.length() > 0 ? name.toString() : customer.getCustomerCode();
     }
 }

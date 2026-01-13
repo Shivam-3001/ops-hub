@@ -16,7 +16,7 @@ public interface PaymentEventRepository extends JpaRepository<PaymentEvent, Long
     @Query("SELECT pe FROM PaymentEvent pe WHERE pe.payment.id = :paymentId AND pe.eventType = :eventType")
     List<PaymentEvent> findByPaymentIdAndEventType(@Param("paymentId") Long paymentId, @Param("eventType") String eventType);
     
-    @Query("SELECT pe FROM PaymentEvent pe WHERE pe.payment.paymentReference = :paymentReference AND pe.gatewayTransactionId = :gatewayTransactionId")
+    @Query("SELECT pe FROM PaymentEvent pe WHERE pe.payment.paymentReference = :paymentReference AND pe.payment.gatewayTransactionId = :gatewayTransactionId")
     Optional<PaymentEvent> findByPaymentReferenceAndGatewayTransactionId(
             @Param("paymentReference") String paymentReference,
             @Param("gatewayTransactionId") String gatewayTransactionId);

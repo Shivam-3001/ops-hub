@@ -6,11 +6,13 @@ import com.company.ops_hub_api.dto.LoginResponse;
 import com.company.ops_hub_api.repository.UserRepository;
 import com.company.ops_hub_api.util.JwtUtil;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 @Transactional
@@ -21,19 +23,31 @@ public class AuthService {
     private final JwtUtil jwtUtil;
 
     public LoginResponse login(LoginRequest request) {
-        // Find user by employeeId
-        User user = userRepository.findByEmployeeId(request.getEmployeeId())
-                .orElseThrow(() -> new BadCredentialsException("Invalid employee ID or password"));
+        // Find user by employeeId (trim and handle case)
+        String employeeId = request.getEmployeeId() != null ? request.getEmployeeId().trim() : null;
+        
+        log.debug("Attempting login for employeeId: {}", employeeId);
+        
+        User user = userRepository.findByEmployeeId(employeeId)
+                .orElseThrow(() -> {
+                    log.warn("Login failed: User not found for employeeId: {}", employeeId);
+                    return new BadCredentialsException("Invalid employee ID or password");
+                });
 
         // Check if user is active
         if (!user.getActive()) {
+            log.warn("Login failed: User account is inactive for employeeId: {}", employeeId);
             throw new BadCredentialsException("User account is inactive");
         }
 
         // Verify password
-        if (!passwordEncoder.matches(request.getPassword(), user.getPasswordHash())) {
+        boolean passwordMatches = passwordEncoder.matches(request.getPassword(), user.getPasswordHash());
+        if (!passwordMatches) {
+            log.warn("Login failed: Password mismatch for employeeId: {}", employeeId);
             throw new BadCredentialsException("Invalid employee ID or password");
         }
+        
+        log.info("Login successful for employeeId: {}", employeeId);
 
         // Generate JWT token
         String token = jwtUtil.generateToken(

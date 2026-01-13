@@ -39,6 +39,7 @@ public class PaymentService {
     private final UserRepository userRepository;
     private final PaymentGatewayService gatewayService;
     private final AuditLogService auditLogService;
+    private final EmailNotificationService emailNotificationService;
     private final ObjectMapper objectMapper;
 
     /**
@@ -212,6 +213,27 @@ public class PaymentService {
         if (paymentId != null) {
             auditLogService.logAction("UPDATE", "PAYMENT", paymentId, 
                     oldValues, newValues, httpRequest);
+        }
+        
+        // Send email notification for successful payment
+        if ("SUCCESS".equalsIgnoreCase(normalizedStatus)) {
+            try {
+                User user = savedPayment.getUser();
+                Customer customer = savedPayment.getCustomer();
+                String userName = user.getFullName() != null ? user.getFullName() : user.getUsername();
+                String customerName = buildCustomerName(customer);
+                String amount = savedPayment.getAmount() + " " + savedPayment.getCurrency();
+                
+                emailNotificationService.sendPaymentSuccessfulNotification(
+                        user.getEmail(),
+                        userName,
+                        savedPayment.getPaymentReference(),
+                        amount,
+                        customerName
+                );
+            } catch (Exception e) {
+                log.error("Error sending payment success email notification", e);
+            }
         }
         
         log.info("Payment callback processed. Payment: {}, Status: {}", 

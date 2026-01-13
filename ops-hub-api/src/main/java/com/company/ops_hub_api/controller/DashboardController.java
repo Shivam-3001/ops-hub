@@ -28,6 +28,11 @@ public class DashboardController {
             long userCount = userRepository.count();
             response.put("database", "connected");
             response.put("userCount", userCount);
+            
+            // Check if test users exist
+            response.put("EMP004_exists", userRepository.findByEmployeeId("EMP004").isPresent());
+            response.put("EMP001_exists", userRepository.findByEmployeeId("EMP001").isPresent());
+            response.put("EMP005_exists", userRepository.findByEmployeeId("EMP005").isPresent());
         } catch (Exception e) {
             response.put("database", "disconnected");
             response.put("error", e.getClass().getSimpleName() + ": " + e.getMessage());
