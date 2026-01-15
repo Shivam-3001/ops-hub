@@ -23,6 +23,7 @@ public class DataSeederService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final EncryptionUtil encryptionUtil;
+    private final AuditLogService auditLogService;
 
     @Bean
     @Transactional
@@ -187,8 +188,31 @@ public class DataSeederService {
         user.setArea(area);
         user.setActive(active);
         user.setTwoFactorEnabled(false);
-        
-        return userRepository.save(user);
+
+        User savedUser = userRepository.save(user);
+        logUserAudit(savedUser, active);
+        return savedUser;
+    }
+
+    private void logUserAudit(User user, boolean active) {
+        if (user == null || user.getId() == null) {
+            return;
+        }
+        java.util.Map<String, Object> newValues = new java.util.HashMap<>();
+        newValues.put("employeeId", user.getEmployeeId());
+        newValues.put("username", user.getUsername());
+        newValues.put("fullName", user.getFullName());
+        newValues.put("userType", user.getUserType());
+        newValues.put("role", user.getRole());
+        newValues.put("areaId", user.getArea() != null ? user.getArea().getId() : null);
+        newValues.put("active", user.getActive());
+
+        auditLogService.logActionForUser(user.getId(), "CREATE", "USER", user.getId(), null, newValues, null);
+        if (Boolean.TRUE.equals(active)) {
+            auditLogService.logActionForUser(user.getId(), "ACTIVATE", "USER", user.getId(), null, newValues, null);
+        } else {
+            auditLogService.logActionForUser(user.getId(), "DEACTIVATE", "USER", user.getId(), null, newValues, null);
+        }
     }
 
     /**

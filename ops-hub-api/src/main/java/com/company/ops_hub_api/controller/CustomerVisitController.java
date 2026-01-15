@@ -3,6 +3,7 @@ package com.company.ops_hub_api.controller;
 import com.company.ops_hub_api.domain.CustomerVisit;
 import com.company.ops_hub_api.dto.CustomerVisitDTO;
 import com.company.ops_hub_api.dto.SubmitVisitDTO;
+import com.company.ops_hub_api.security.RequiresPermission;
 import com.company.ops_hub_api.service.CustomerVisitService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
@@ -25,6 +26,7 @@ public class CustomerVisitController {
      * Users can only submit visits for customers allocated to them
      */
     @PostMapping
+    @RequiresPermission("CREATE_VISITS")
     public ResponseEntity<CustomerVisitDTO> submitVisit(
             @Valid @RequestBody SubmitVisitDTO dto,
             HttpServletRequest httpRequest) {
@@ -36,6 +38,7 @@ public class CustomerVisitController {
      * Get all visits for current user
      */
     @GetMapping("/my-visits")
+    @RequiresPermission("VIEW_VISITS")
     public ResponseEntity<List<CustomerVisitDTO>> getMyVisits() {
         List<CustomerVisit> visits = visitService.getMyVisits();
         return ResponseEntity.ok(visits.stream()
@@ -48,6 +51,7 @@ public class CustomerVisitController {
      * Only returns visits for customers allocated to user
      */
     @GetMapping("/customers/{customerId}")
+    @RequiresPermission("VIEW_VISITS")
     public ResponseEntity<List<CustomerVisitDTO>> getCustomerVisits(@PathVariable Long customerId) {
         List<CustomerVisit> visits = visitService.getCustomerVisits(customerId);
         return ResponseEntity.ok(visits.stream()
@@ -59,6 +63,7 @@ public class CustomerVisitController {
      * Get a specific visit by ID
      */
     @GetMapping("/{id}")
+    @RequiresPermission("VIEW_VISITS")
     public ResponseEntity<CustomerVisitDTO> getVisitById(@PathVariable Long id) {
         CustomerVisit visit = visitService.getVisitById(id);
         return ResponseEntity.ok(toDTO(visit));
@@ -68,6 +73,7 @@ public class CustomerVisitController {
      * Update visit status
      */
     @PatchMapping("/{id}/status")
+    @RequiresPermission("VIEW_VISITS")
     public ResponseEntity<CustomerVisitDTO> updateVisitStatus(
             @PathVariable Long id,
             @RequestParam String status,

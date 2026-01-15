@@ -157,6 +157,26 @@ class ApiClient {
     return this.request('/permissions/me');
   }
 
+  // ==================== User Management ====================
+
+  async getManagedUsers() {
+    return this.request('/user-management/users');
+  }
+
+  async createManagedUser(data) {
+    return this.request('/user-management/users', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateManagedUserStatus(userId, active) {
+    return this.request(`/user-management/users/${userId}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ active }),
+    });
+  }
+
   // ==================== Dashboard ====================
 
   async getDashboard() {

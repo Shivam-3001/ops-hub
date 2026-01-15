@@ -51,6 +51,7 @@ public class PaymentController {
      * Get payment by reference
      */
     @GetMapping("/reference/{paymentReference}")
+    @RequiresPermission("VIEW_PAYMENTS")
     public ResponseEntity<PaymentDTO> getPaymentByReference(@PathVariable String paymentReference) {
         Payment payment = paymentService.getPaymentByReference(paymentReference);
         return ResponseEntity.ok(toDTO(payment));
@@ -60,6 +61,7 @@ public class PaymentController {
      * Get payment receipt
      */
     @GetMapping("/{paymentReference}/receipt")
+    @RequiresPermission("VIEW_PAYMENTS")
     public ResponseEntity<PaymentReceiptDTO> getPaymentReceipt(@PathVariable String paymentReference) {
         PaymentReceiptDTO receipt = paymentService.getPaymentReceipt(paymentReference);
         return ResponseEntity.ok(receipt);
@@ -69,6 +71,7 @@ public class PaymentController {
      * Get current user's payments
      */
     @GetMapping("/my-payments")
+    @RequiresPermission("VIEW_PAYMENTS")
     public ResponseEntity<List<PaymentDTO>> getMyPayments() {
         List<Payment> payments = paymentService.getMyPayments();
         return ResponseEntity.ok(payments.stream()
@@ -80,6 +83,7 @@ public class PaymentController {
      * Get payments for a customer
      */
     @GetMapping("/customers/{customerId}")
+    @RequiresPermission("VIEW_PAYMENTS")
     public ResponseEntity<List<PaymentDTO>> getCustomerPayments(@PathVariable Long customerId) {
         List<Payment> payments = paymentService.getCustomerPayments(customerId);
         return ResponseEntity.ok(payments.stream()

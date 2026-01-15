@@ -3,6 +3,7 @@ package com.company.ops_hub_api.controller;
 import com.company.ops_hub_api.domain.CustomerReview;
 import com.company.ops_hub_api.dto.CustomerReviewDTO;
 import com.company.ops_hub_api.dto.SubmitReviewDTO;
+import com.company.ops_hub_api.security.RequiresPermission;
 import com.company.ops_hub_api.service.CustomerReviewService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
@@ -25,6 +26,7 @@ public class CustomerReviewController {
      * Users can only submit reviews for their own visits
      */
     @PostMapping
+    @RequiresPermission("VIEW_VISITS")
     public ResponseEntity<CustomerReviewDTO> submitReview(
             @Valid @RequestBody SubmitReviewDTO dto,
             HttpServletRequest httpRequest) {
@@ -36,6 +38,7 @@ public class CustomerReviewController {
      * Get review for a visit
      */
     @GetMapping("/visits/{visitId}")
+    @RequiresPermission("VIEW_VISITS")
     public ResponseEntity<CustomerReviewDTO> getReviewByVisitId(@PathVariable Long visitId) {
         CustomerReview review = reviewService.getReviewByVisitId(visitId);
         return ResponseEntity.ok(toDTO(review));
@@ -45,6 +48,7 @@ public class CustomerReviewController {
      * Get all reviews for current user
      */
     @GetMapping("/my-reviews")
+    @RequiresPermission("VIEW_VISITS")
     public ResponseEntity<List<CustomerReviewDTO>> getMyReviews() {
         List<CustomerReview> reviews = reviewService.getMyReviews();
         return ResponseEntity.ok(reviews.stream()
@@ -57,6 +61,7 @@ public class CustomerReviewController {
      * Only returns reviews for customers allocated to user
      */
     @GetMapping("/customers/{customerId}")
+    @RequiresPermission("VIEW_VISITS")
     public ResponseEntity<List<CustomerReviewDTO>> getCustomerReviews(@PathVariable Long customerId) {
         List<CustomerReview> reviews = reviewService.getCustomerReviews(customerId);
         return ResponseEntity.ok(reviews.stream()

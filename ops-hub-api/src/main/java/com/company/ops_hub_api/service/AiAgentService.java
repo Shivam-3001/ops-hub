@@ -8,6 +8,7 @@ import com.company.ops_hub_api.repository.AiActionRepository;
 import com.company.ops_hub_api.repository.AiConversationRepository;
 import com.company.ops_hub_api.repository.UserRepository;
 import com.company.ops_hub_api.security.UserPrincipal;
+import com.company.ops_hub_api.util.HierarchyUtil;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
@@ -34,12 +35,8 @@ public class AiAgentService {
     private final AiConversationRepository conversationRepository;
     private final AiActionRepository actionRepository;
     private final UserRepository userRepository;
-    private final AiActionValidator actionValidator;
     private final AuditLogService auditLogService;
     private final ObjectMapper objectMapper;
-
-    // Store confirmation tokens for restricted actions (in-memory, could be moved to Redis in production)
-    private final Map<String, ConfirmationToken> confirmationTokens = new ConcurrentHashMap<>();
 
     /**
      * Get AI context for current user
@@ -58,6 +55,13 @@ public class AiAgentService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new IllegalArgumentException("User not found"));
 
+        Map<String, Object> context = new HashMap<>();
+        if (additionalContext != null) {
+            context.putAll(additionalContext);
+        }
+        context.put("userType", HierarchyUtil.normalizeUserType(user));
+        context.put("geography", HierarchyUtil.buildGeographyContext(user));
+
         return AiContextDTO.builder()
                 .userId(userId)
                 .employeeId(user.getEmployeeId())
@@ -67,7 +71,7 @@ public class AiAgentService {
                 .permissions(new ArrayList<>(userPrincipal.getPermissions()))
                 .currentPage(currentPage)
                 .currentModule(currentModule)
-                .additionalContext(additionalContext != null ? additionalContext : new HashMap<>())
+                .additionalContext(context)
                 .build();
     }
 
@@ -98,8 +102,8 @@ public class AiAgentService {
         // For now, we simulate AI response
         String aiResponse = generateAiResponse(request.getMessage(), context);
 
-        // Generate suggested actions based on message and context
-        List<AiActionSuggestionDTO> suggestedActions = generateSuggestedActions(request.getMessage(), context);
+        // Actions are disabled per business rules (read & summarize only)
+        List<AiActionSuggestionDTO> suggestedActions = new ArrayList<>();
 
         // Update conversation context
         updateConversationContext(conversation, request, context);
@@ -121,124 +125,7 @@ public class AiAgentService {
      */
     @Transactional
     public AiActionResponseDTO executeAction(AiActionRequestDTO request, HttpServletRequest httpRequest) {
-        // Check permission to use AI agent
-        checkAiAgentPermission();
-
-        UserPrincipal userPrincipal = getCurrentUserPrincipal();
-        Long userId = userPrincipal.getUserId();
-        if (userId == null) {
-            throw new IllegalStateException("User ID cannot be null");
-        }
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new IllegalArgumentException("User not found"));
-
-        // Validate action permission
-        actionValidator.validateActionPermission(request.getActionType(), request.getActionName());
-
-        // Check if confirmation is required
-        boolean requiresConfirmation = actionValidator.requiresConfirmation(
-                request.getActionType(), request.getActionName());
-
-        if (requiresConfirmation) {
-            // Validate confirmation token
-            if (request.getConfirmationToken() == null || 
-                !validateConfirmationToken(request.getConfirmationToken(), request.getActionType(), request.getActionName())) {
-                String confirmationToken = generateConfirmationToken(request.getActionType(), request.getActionName(), user.getId());
-                return AiActionResponseDTO.builder()
-                        .actionType(request.getActionType())
-                        .actionName(request.getActionName())
-                        .executionStatus("PENDING")
-                        .requiresConfirmation(true)
-                        .confirmationToken(confirmationToken)
-                        .build();
-            }
-        }
-
-        // Get or create conversation
-        AiConversation conversation = null;
-        if (request.getConversationId() != null) {
-            conversation = conversationRepository.findByConversationId(request.getConversationId())
-                    .orElse(null);
-        }
-        if (conversation == null) {
-            conversation = createNewConversation(user, "AI Action: " + request.getActionName());
-        }
-
-        // Create AI action record
-        AiAction action = new AiAction();
-        action.setConversation(conversation);
-        action.setActionType(request.getActionType());
-        action.setActionName(request.getActionName());
-        action.setExecutionStatus("EXECUTING");
-        action.setExecutedAt(LocalDateTime.now());
-
-        try {
-            // Convert action data to JSON
-            if (request.getActionData() != null) {
-                action.setActionData(objectMapper.writeValueAsString(request.getActionData()));
-            }
-
-            action = actionRepository.save(action);
-
-            // Execute the action (delegate to appropriate service)
-            Object result = executeActionInternal(request.getActionType(), request.getActionName(), 
-                    request.getActionData(), user);
-
-            // Update action with result
-            action.setExecutionStatus("COMPLETED");
-            action.setCompletedAt(LocalDateTime.now());
-            if (result != null) {
-                action.setResultData(objectMapper.writeValueAsString(result));
-            }
-            action = actionRepository.save(action);
-
-            // Log to audit log
-            Map<String, Object> actionData = new HashMap<>();
-            actionData.put("actionId", action.getId());
-            actionData.put("actionType", request.getActionType());
-            actionData.put("actionName", request.getActionName());
-            actionData.put("triggeredBy", "AI_AGENT");
-            actionData.put("conversationId", conversation.getConversationId());
-            if (result != null) {
-                actionData.put("result", result);
-            }
-
-            auditLogService.logAction("AI_ACTION_EXECUTED", "AI_ACTION", action.getId(), 
-                    null, actionData, httpRequest);
-
-            log.info("AI action executed successfully: {} by user {}", request.getActionName(), user.getEmployeeId());
-
-            return AiActionResponseDTO.builder()
-                    .actionId(action.getId())
-                    .actionType(request.getActionType())
-                    .actionName(request.getActionName())
-                    .executionStatus("COMPLETED")
-                    .resultData(result)
-                    .requiresConfirmation(false)
-                    .build();
-
-        } catch (AccessDeniedException e) {
-            action.setExecutionStatus("FAILED");
-            action.setErrorMessage("Permission denied: " + e.getMessage());
-            action.setCompletedAt(LocalDateTime.now());
-            actionRepository.save(action);
-
-            auditLogService.logError("AI_ACTION_DENIED", "AI_ACTION", action.getId(), 
-                    "Permission denied: " + e.getMessage(), httpRequest);
-
-            throw e;
-        } catch (Exception e) {
-            action.setExecutionStatus("FAILED");
-            action.setErrorMessage(e.getMessage());
-            action.setCompletedAt(LocalDateTime.now());
-            actionRepository.save(action);
-
-            auditLogService.logError("AI_ACTION_FAILED", "AI_ACTION", action.getId(), 
-                    "Error: " + e.getMessage(), httpRequest);
-
-            log.error("AI action execution failed: {}", request.getActionName(), e);
-            throw new RuntimeException("Failed to execute AI action: " + e.getMessage(), e);
-        }
+        throw new AccessDeniedException("AI actions are disabled. Read & summarize only.");
     }
 
     /**
@@ -330,100 +217,10 @@ public class AiAgentService {
         // This is a placeholder that simulates AI response
         return String.format(
                 "I understand you're asking about: %s. " +
-                "Based on your role (%s) and permissions, I can help you with that. " +
-                "Here are some actions I can perform for you.",
+                "Based on your role (%s) and permissions, I can summarize and explain the data you can access.",
                 message,
                 String.join(", ", context.getRoles())
         );
-    }
-
-    private List<AiActionSuggestionDTO> generateSuggestedActions(String message, AiContextDTO context) {
-        List<AiActionSuggestionDTO> suggestions = new ArrayList<>();
-
-        // Generate suggestions based on user permissions and message content
-        if (context.getPermissions().contains("VIEW_CUSTOMERS")) {
-            if (message.toLowerCase().contains("customer") || message.toLowerCase().contains("client")) {
-                suggestions.add(AiActionSuggestionDTO.builder()
-                        .actionType("DATA_QUERY")
-                        .actionName("VIEW_CUSTOMERS")
-                        .description("View customer information")
-                        .requiresPermission(true)
-                        .requiredPermission("VIEW_CUSTOMERS")
-                        .requiresConfirmation(false)
-                        .build());
-            }
-        }
-
-        if (context.getPermissions().contains("VIEW_REPORTS")) {
-            if (message.toLowerCase().contains("report") || message.toLowerCase().contains("data")) {
-                suggestions.add(AiActionSuggestionDTO.builder()
-                        .actionType("REPORT_GENERATION")
-                        .actionName("GENERATE_REPORT")
-                        .description("Generate a report")
-                        .requiresPermission(true)
-                        .requiredPermission("VIEW_REPORTS")
-                        .requiresConfirmation(false)
-                        .build());
-            }
-        }
-
-        return suggestions;
-    }
-
-    private Object executeActionInternal(String actionType, String actionName, 
-                                        Map<String, Object> actionData, User user) {
-        // TODO: Delegate to appropriate service based on action type
-        // This is a placeholder - actual implementation would route to specific services
-        
-        switch (actionType) {
-            case "DATA_QUERY":
-                // Delegate to appropriate data service
-                return executeDataQuery(actionName, actionData, user);
-            case "REPORT_GENERATION":
-                // Delegate to report service
-                return executeReportGeneration(actionName, actionData, user);
-            default:
-                throw new IllegalArgumentException("Unknown action type: " + actionType);
-        }
-    }
-
-    private Object executeDataQuery(String actionName, Map<String, Object> actionData, User user) {
-        // TODO: Implement actual data query logic
-        return Map.of("status", "success", "message", "Data query executed", "action", actionName);
-    }
-
-    private Object executeReportGeneration(String actionName, Map<String, Object> actionData, User user) {
-        // TODO: Implement actual report generation logic
-        return Map.of("status", "success", "message", "Report generated", "action", actionName);
-    }
-
-    private String generateConfirmationToken(String actionType, String actionName, Long userId) {
-        String token = UUID.randomUUID().toString();
-        confirmationTokens.put(token, new ConfirmationToken(actionType, actionName, LocalDateTime.now()));
-        return token;
-    }
-
-    private boolean validateConfirmationToken(String token, String actionType, String actionName) {
-        ConfirmationToken confirmationToken = confirmationTokens.get(token);
-        if (confirmationToken == null) {
-            return false;
-        }
-
-        // Check if token is expired (5 minutes)
-        if (confirmationToken.getCreatedAt().isBefore(LocalDateTime.now().minusMinutes(5))) {
-            confirmationTokens.remove(token);
-            return false;
-        }
-
-        // Verify action matches
-        if (!confirmationToken.getActionType().equals(actionType) || 
-            !confirmationToken.getActionName().equals(actionName)) {
-            return false;
-        }
-
-        // Remove token after validation (one-time use)
-        confirmationTokens.remove(token);
-        return true;
     }
 
     private void logAiConversation(AiConversation conversation, String message, String response, HttpServletRequest request) {
@@ -442,20 +239,4 @@ public class AiAgentService {
         }
     }
 
-    // Inner class for confirmation tokens
-    private static class ConfirmationToken {
-        private final String actionType;
-        private final String actionName;
-        private final LocalDateTime createdAt;
-
-        public ConfirmationToken(String actionType, String actionName, LocalDateTime createdAt) {
-            this.actionType = actionType;
-            this.actionName = actionName;
-            this.createdAt = createdAt;
-        }
-
-        public String getActionType() { return actionType; }
-        public String getActionName() { return actionName; }
-        public LocalDateTime getCreatedAt() { return createdAt; }
-    }
 }

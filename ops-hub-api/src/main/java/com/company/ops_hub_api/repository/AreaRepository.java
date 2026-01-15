@@ -10,6 +10,7 @@ import java.util.Optional;
 @Repository
 public interface AreaRepository extends JpaRepository<Area, Long> {
     Optional<Area> findByCode(String code);
+    Optional<Area> findByNameIgnoreCase(String name);
     List<Area> findByZoneId(Long zoneId);
     boolean existsByCode(String code);
 }

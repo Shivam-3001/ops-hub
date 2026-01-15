@@ -1,8 +1,11 @@
 package com.company.ops_hub_api.service;
 
 import com.company.ops_hub_api.domain.Customer;
+import com.company.ops_hub_api.domain.User;
 import com.company.ops_hub_api.repository.CustomerRepository;
+import com.company.ops_hub_api.repository.UserRepository;
 import com.company.ops_hub_api.security.UserPrincipal;
+import com.company.ops_hub_api.util.HierarchyUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.core.Authentication;
@@ -18,6 +21,7 @@ import java.util.List;
 public class CustomerService {
 
     private final CustomerRepository customerRepository;
+    private final UserRepository userRepository;
 
     /**
      * Get all customers - filtered by permissions
@@ -26,25 +30,28 @@ public class CustomerService {
      */
     @Transactional(readOnly = true)
     public List<Customer> getAllCustomers() {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        
-        if (authentication == null || !(authentication.getPrincipal() instanceof UserPrincipal)) {
-            throw new org.springframework.security.access.AccessDeniedException("User not authenticated");
-        }
-        
-        UserPrincipal userPrincipal = (UserPrincipal) authentication.getPrincipal();
-        
-        // If user has VIEW_CUSTOMERS permission, return all customers
-        if (userPrincipal.hasPermission("VIEW_CUSTOMERS")) {
+        User currentUser = getCurrentUser();
+        String userType = HierarchyUtil.normalizeUserType(currentUser);
+
+        if (HierarchyUtil.ADMIN.equals(userType)) {
             return customerRepository.findAll();
         }
-        
-        // Otherwise, return only allocated customers
-        Long userId = userPrincipal.getUserId();
-        if (userId == null) {
-            throw new IllegalStateException("User ID cannot be null");
+
+        Long clusterId = HierarchyUtil.getClusterId(currentUser);
+        Long circleId = HierarchyUtil.getCircleId(currentUser);
+        Long zoneId = HierarchyUtil.getZoneId(currentUser);
+
+        if (HierarchyUtil.CLUSTER_HEAD.equals(userType) && clusterId != null) {
+            return customerRepository.findByAreaZoneCircleClusterId(clusterId);
         }
-        return customerRepository.findCustomersByAssignedUserId(userId);
+        if (HierarchyUtil.CIRCLE_HEAD.equals(userType) && circleId != null) {
+            return customerRepository.findByAreaZoneCircleId(circleId);
+        }
+        if (HierarchyUtil.ZONE_HEAD.equals(userType) && zoneId != null) {
+            return customerRepository.findByAreaZoneId(zoneId);
+        }
+
+        return customerRepository.findCustomersByAssignedUserId(currentUser.getId());
     }
 
     /**
@@ -59,33 +66,12 @@ public class CustomerService {
         Customer customer = customerRepository.findById(customerId)
                 .orElseThrow(() -> new IllegalArgumentException("Customer not found"));
         
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        if (authentication == null || !(authentication.getPrincipal() instanceof UserPrincipal)) {
-            throw new org.springframework.security.access.AccessDeniedException("User not authenticated");
-        }
-        
-        UserPrincipal userPrincipal = (UserPrincipal) authentication.getPrincipal();
-        
-        // If user has VIEW_CUSTOMERS permission, allow access
-        if (userPrincipal.hasPermission("VIEW_CUSTOMERS")) {
-            return customer;
-        }
-        
-        // Otherwise, check if customer is allocated to user
-        Long userId = userPrincipal.getUserId();
-        if (userId == null) {
-            throw new IllegalStateException("User ID cannot be null");
-        }
-        
-        boolean isAllocated = customerRepository.findCustomersByAssignedUserId(userId)
-                .stream()
-                .anyMatch(c -> c.getId().equals(customerId));
-        
-        if (!isAllocated) {
+        User currentUser = getCurrentUser();
+        if (!canAccessCustomer(currentUser, customer)) {
             throw new org.springframework.security.access.AccessDeniedException(
                     "You do not have access to this customer");
         }
-        
+
         return customer;
     }
 
@@ -95,30 +81,86 @@ public class CustomerService {
      */
     @Transactional(readOnly = true)
     public List<Customer> getCustomersByArea(Long areaId) {
-        List<Customer> customers = customerRepository.findByAreaId(areaId);
-        
+        if (areaId == null) {
+            throw new IllegalArgumentException("Area ID cannot be null");
+        }
+
+        User currentUser = getCurrentUser();
+        String userType = HierarchyUtil.normalizeUserType(currentUser);
+
+        if (HierarchyUtil.ADMIN.equals(userType)) {
+            return customerRepository.findByAreaId(areaId);
+        }
+
+        Long circleId = HierarchyUtil.getCircleId(currentUser);
+        Long zoneId = HierarchyUtil.getZoneId(currentUser);
+        Long currentAreaId = HierarchyUtil.getAreaId(currentUser);
+
+        if (HierarchyUtil.CIRCLE_HEAD.equals(userType) && circleId != null) {
+            return customerRepository.findByAreaId(areaId).stream()
+                    .filter(customer -> circleId.equals(HierarchyUtil.getCircleId(customer.getArea())))
+                    .toList();
+        }
+        if (HierarchyUtil.ZONE_HEAD.equals(userType) && zoneId != null) {
+            return customerRepository.findByAreaId(areaId).stream()
+                    .filter(customer -> zoneId.equals(HierarchyUtil.getZoneId(customer.getArea())))
+                    .toList();
+        }
+        if (HierarchyUtil.AREA_HEAD.equals(userType) || HierarchyUtil.STORE_HEAD.equals(userType)
+                || HierarchyUtil.AGENT.equals(userType)) {
+            if (currentAreaId != null && currentAreaId.equals(areaId)) {
+                return customerRepository.findCustomersByAssignedUserId(currentUser.getId()).stream()
+                        .filter(customer -> customer.getArea() != null &&
+                                areaId.equals(customer.getArea().getId()))
+                        .toList();
+            }
+            return List.of();
+        }
+
+        return List.of();
+    }
+
+    private boolean canAccessCustomer(User currentUser, Customer customer) {
+        if (currentUser == null || customer == null) {
+            return false;
+        }
+        String userType = HierarchyUtil.normalizeUserType(currentUser);
+        if (HierarchyUtil.ADMIN.equals(userType)) {
+            return true;
+        }
+        if (HierarchyUtil.CLUSTER_HEAD.equals(userType)) {
+            Long userClusterId = HierarchyUtil.getClusterId(currentUser);
+            Long customerClusterId = HierarchyUtil.getClusterId(customer.getArea());
+            return userClusterId != null && userClusterId.equals(customerClusterId);
+        }
+        if (HierarchyUtil.CIRCLE_HEAD.equals(userType)) {
+            Long userCircleId = HierarchyUtil.getCircleId(currentUser);
+            Long customerCircleId = HierarchyUtil.getCircleId(customer.getArea());
+            return userCircleId != null && userCircleId.equals(customerCircleId);
+        }
+        if (HierarchyUtil.ZONE_HEAD.equals(userType)) {
+            Long userZoneId = HierarchyUtil.getZoneId(currentUser);
+            Long customerZoneId = HierarchyUtil.getZoneId(customer.getArea());
+            return userZoneId != null && userZoneId.equals(customerZoneId);
+        }
+
+        return customerRepository.findCustomersByAssignedUserId(currentUser.getId())
+                .stream()
+                .anyMatch(allocated -> allocated.getId().equals(customer.getId()));
+    }
+
+    private User getCurrentUser() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         if (authentication == null || !(authentication.getPrincipal() instanceof UserPrincipal)) {
             throw new org.springframework.security.access.AccessDeniedException("User not authenticated");
         }
-        
         UserPrincipal userPrincipal = (UserPrincipal) authentication.getPrincipal();
-        
-        // If user has VIEW_CUSTOMERS permission, return all customers in area
-        if (userPrincipal.hasPermission("VIEW_CUSTOMERS")) {
-            return customers;
-        }
-        
-        // Otherwise, filter to only allocated customers
         Long userId = userPrincipal.getUserId();
         if (userId == null) {
             throw new IllegalStateException("User ID cannot be null");
         }
-        
-        List<Customer> allocatedCustomers = customerRepository.findCustomersByAssignedUserId(userId);
-        return customers.stream()
-                .filter(c -> allocatedCustomers.stream()
-                        .anyMatch(ac -> ac.getId().equals(c.getId())))
-                .toList();
+        return userRepository.findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("User not found"));
     }
+
 }

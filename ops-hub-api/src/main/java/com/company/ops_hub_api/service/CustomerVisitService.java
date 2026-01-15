@@ -67,11 +67,11 @@ public class CustomerVisitService {
         if (preventDuplicatePerDay) {
             LocalDate visitDate = dto.getVisitDate().toLocalDate();
             List<com.company.ops_hub_api.domain.CustomerVisit> existingVisits = visitRepository
-                    .findByCustomerIdAndUserIdAndVisitDate(customerId, userId, visitDate);
-            
+                    .findByCustomerIdAndVisitDate(customerId, visitDate);
+
             if (!existingVisits.isEmpty()) {
                 throw new IllegalStateException(
-                        String.format("A visit already exists for customer %s on %s", 
+                        String.format("A visit already exists for customer %s on %s",
                                 customer.getCustomerCode(), visitDate));
             }
         }

@@ -2,7 +2,8 @@ package com.company.ops_hub_api.service;
 
 import com.company.ops_hub_api.domain.User;
 import com.company.ops_hub_api.repository.CustomerAllocationRepository;
-import com.company.ops_hub_api.repository.UserRoleRepository;
+import com.company.ops_hub_api.repository.CustomerRepository;
+import com.company.ops_hub_api.util.HierarchyUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -21,51 +22,52 @@ import java.util.stream.Collectors;
 public class ReportDataFilter {
 
     private final CustomerAllocationRepository allocationRepository;
-    private final UserRoleRepository userRoleRepository;
+    private final CustomerRepository customerRepository;
 
     /**
      * Get customer IDs that the user has access to
      * Based on role and customer allocation
      */
     public Set<Long> getAccessibleCustomerIds(User user) {
-        List<String> userRoles = userRoleRepository.findRoleCodesByUserId(user.getId());
-        
-        // Admin and high-level managers can see all customers
-        if (userRoles.contains("ADMIN") || 
-            userRoles.contains("CLUSTER_LEAD") || 
-            user.getUserType().contains("CLUSTER_LEAD")) {
-            return null; // null means no filter (all customers)
+        String userType = HierarchyUtil.normalizeUserType(user);
+
+        if (HierarchyUtil.ADMIN.equals(userType)) {
+            return null;
         }
-        
-        // Circle leads can see customers in their circle
-        if (userRoles.contains("CIRCLE_LEAD") || 
-            user.getUserType().contains("CIRCLE_LEAD")) {
-            // Get customers in the same circle
-            if (user.getArea() != null && 
-                user.getArea().getZone() != null && 
-                user.getArea().getZone().getCircle() != null) {
-                // For now, return null (all customers in circle)
-                // In production, query customers by circle
-                return null;
-            }
+
+        Long clusterId = HierarchyUtil.getClusterId(user);
+        Long circleId = HierarchyUtil.getCircleId(user);
+        Long zoneId = HierarchyUtil.getZoneId(user);
+        Long areaId = HierarchyUtil.getAreaId(user);
+
+        if (HierarchyUtil.CLUSTER_HEAD.equals(userType) && clusterId != null) {
+            return customerRepository.findByAreaZoneCircleClusterId(clusterId)
+                    .stream()
+                    .map(customer -> customer.getId())
+                    .collect(Collectors.toSet());
         }
-        
-        // Zone leads can see customers in their zone
-        if (userRoles.contains("ZONE_LEAD") || 
-            user.getUserType().contains("ZONE_LEAD")) {
-            // Get customers in the same zone
-            if (user.getArea() != null && 
-                user.getArea().getZone() != null) {
-                // For now, return null (all customers in zone)
-                // In production, query customers by zone
-                return null;
-            }
+        if (HierarchyUtil.CIRCLE_HEAD.equals(userType) && circleId != null) {
+            return customerRepository.findByAreaZoneCircleId(circleId)
+                    .stream()
+                    .map(customer -> customer.getId())
+                    .collect(Collectors.toSet());
         }
-        
-        // Area leads and agents can only see allocated customers
-        List<com.company.ops_hub_api.domain.CustomerAllocation> allocations = 
+        if (HierarchyUtil.ZONE_HEAD.equals(userType) && zoneId != null) {
+            return customerRepository.findByAreaZoneId(zoneId)
+                    .stream()
+                    .map(customer -> customer.getId())
+                    .collect(Collectors.toSet());
+        }
+        if (HierarchyUtil.AREA_HEAD.equals(userType) && areaId != null) {
+            return customerRepository.findByAreaId(areaId)
+                    .stream()
+                    .map(customer -> customer.getId())
+                    .collect(Collectors.toSet());
+        }
+
+        List<com.company.ops_hub_api.domain.CustomerAllocation> allocations =
                 allocationRepository.findActiveAllocationsByUserId(user.getId());
-        
+
         return allocations.stream()
                 .map(allocation -> allocation.getCustomer().getId())
                 .collect(Collectors.toSet());

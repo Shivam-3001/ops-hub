@@ -21,6 +21,10 @@ public interface CustomerRepository extends JpaRepository<Customer, Long> {
     
     @Query("SELECT c FROM Customer c WHERE c.area.id = :areaId")
     List<Customer> findByAreaId(@Param("areaId") Long areaId);
+
+    List<Customer> findByAreaZoneId(Long zoneId);
+    List<Customer> findByAreaZoneCircleId(Long circleId);
+    List<Customer> findByAreaZoneCircleClusterId(Long clusterId);
     
     List<Customer> findByStatus(String status);
 }

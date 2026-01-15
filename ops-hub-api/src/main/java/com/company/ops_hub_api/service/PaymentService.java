@@ -12,6 +12,7 @@ import com.company.ops_hub_api.repository.PaymentEventRepository;
 import com.company.ops_hub_api.repository.PaymentRepository;
 import com.company.ops_hub_api.repository.UserRepository;
 import com.company.ops_hub_api.security.UserPrincipal;
+import com.company.ops_hub_api.util.HierarchyUtil;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
@@ -57,6 +58,11 @@ public class PaymentService {
         if (userId == null) {
             throw new IllegalStateException("User ID cannot be null");
         }
+
+        String userType = HierarchyUtil.normalizeUserType(currentUser);
+        if (!HierarchyUtil.AGENT.equals(userType)) {
+            throw new AccessDeniedException("Only agents can initiate payments");
+        }
         
         // Get customer
         Long customerId = dto.getCustomerId();
@@ -65,6 +71,14 @@ public class PaymentService {
         }
         Customer customer = customerRepository.findById(customerId)
                 .orElseThrow(() -> new IllegalArgumentException("Customer not found"));
+
+        // Amount must match pending amount
+        if (customer.getPendingAmount() == null) {
+            throw new IllegalStateException("Pending amount is not available for this customer");
+        }
+        if (dto.getAmount() == null || customer.getPendingAmount().compareTo(dto.getAmount()) != 0) {
+            throw new IllegalArgumentException("Payment amount must match pending amount");
+        }
         
         // Validate UPI ID for UPI payments
         if ("UPI".equalsIgnoreCase(dto.getPaymentMethod()) && 
@@ -84,7 +98,7 @@ public class PaymentService {
         payment.setCurrency(dto.getCurrency() != null ? dto.getCurrency() : "INR");
         payment.setPaymentMethod(dto.getPaymentMethod());
         payment.setUpiId(dto.getUpiId());
-        payment.setPaymentStatus("PENDING"); // Maps to INITIATED in user terms
+        payment.setPaymentStatus("INITIATED");
         
         Payment savedPayment = paymentRepository.save(payment);
         
@@ -95,7 +109,7 @@ public class PaymentService {
                         paymentReference, dto.getAmount(), dto.getUpiId());
                 
                 savedPayment.setGatewayTransactionId((String) gatewayResponse.get("gatewayTransactionId"));
-                savedPayment.setPaymentStatus("PROCESSING"); // Maps to INITIATED
+                savedPayment.setPaymentStatus("INITIATED");
                 savedPayment.setGatewayResponse(convertToJson(gatewayResponse));
                 savedPayment = paymentRepository.save(savedPayment);
                 
@@ -119,6 +133,13 @@ public class PaymentService {
             eventData.put("paymentMethod", dto.getPaymentMethod());
             eventData.put("status", "SUCCESS");
             createPaymentEvent(savedPayment, "PROCESSED", eventData, httpRequest);
+
+            // Reduce pending amount on immediate success
+            customer.setPendingAmount(customer.getPendingAmount().subtract(savedPayment.getAmount()));
+            if (customer.getPendingAmount().compareTo(java.math.BigDecimal.ZERO) < 0) {
+                customer.setPendingAmount(java.math.BigDecimal.ZERO);
+            }
+            customerRepository.save(customer);
         }
         
         // Log audit
@@ -135,6 +156,18 @@ public class PaymentService {
         if (paymentId != null) {
             auditLogService.logAction("CREATE", "PAYMENT", paymentId, 
                     null, newValues, httpRequest);
+        }
+
+        // Log payment completion for immediate-success flows
+        if ("SUCCESS".equalsIgnoreCase(savedPayment.getPaymentStatus())) {
+            Map<String, Object> completionValues = new HashMap<>();
+            completionValues.put("paymentStatus", savedPayment.getPaymentStatus());
+            completionValues.put("paymentDate", savedPayment.getPaymentDate());
+            completionValues.put("transactionId", savedPayment.getTransactionId());
+            if (paymentId != null) {
+                auditLogService.logAction("PAYMENT_COMPLETED", "PAYMENT", paymentId,
+                        null, completionValues, httpRequest);
+            }
         }
         
         log.info("Payment {} initiated for customer {} by user {}", 
@@ -213,6 +246,24 @@ public class PaymentService {
         if (paymentId != null) {
             auditLogService.logAction("UPDATE", "PAYMENT", paymentId, 
                     oldValues, newValues, httpRequest);
+        }
+
+        if ("SUCCESS".equalsIgnoreCase(normalizedStatus) && paymentId != null) {
+            // Reduce pending amount on success
+            Customer paymentCustomer = savedPayment.getCustomer();
+            if (paymentCustomer != null && paymentCustomer.getPendingAmount() != null) {
+                paymentCustomer.setPendingAmount(paymentCustomer.getPendingAmount().subtract(savedPayment.getAmount()));
+                if (paymentCustomer.getPendingAmount().compareTo(java.math.BigDecimal.ZERO) < 0) {
+                    paymentCustomer.setPendingAmount(java.math.BigDecimal.ZERO);
+                }
+                customerRepository.save(paymentCustomer);
+            }
+            Map<String, Object> completionValues = new HashMap<>();
+            completionValues.put("paymentStatus", savedPayment.getPaymentStatus());
+            completionValues.put("paymentDate", savedPayment.getPaymentDate());
+            completionValues.put("transactionId", savedPayment.getTransactionId());
+            auditLogService.logAction("PAYMENT_COMPLETED", "PAYMENT", paymentId,
+                    null, completionValues, httpRequest);
         }
         
         // Send email notification for successful payment

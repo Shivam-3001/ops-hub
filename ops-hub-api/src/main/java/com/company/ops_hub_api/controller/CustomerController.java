@@ -1,6 +1,7 @@
 package com.company.ops_hub_api.controller;
 
 import com.company.ops_hub_api.domain.Customer;
+import com.company.ops_hub_api.security.RequiresPermission;
 import com.company.ops_hub_api.service.CustomerService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -21,6 +22,7 @@ public class CustomerController {
      * Otherwise returns only allocated customers
      */
     @GetMapping
+    @RequiresPermission("VIEW_CUSTOMERS")
     public ResponseEntity<List<Customer>> getAllCustomers() {
         List<Customer> customers = customerService.getAllCustomers();
         return ResponseEntity.ok(customers);
@@ -31,6 +33,7 @@ public class CustomerController {
      * Users can only access customers they have permission to view
      */
     @GetMapping("/{id}")
+    @RequiresPermission("VIEW_CUSTOMERS")
     public ResponseEntity<Customer> getCustomerById(@PathVariable Long id) {
         Customer customer = customerService.getCustomerById(id);
         return ResponseEntity.ok(customer);
@@ -41,6 +44,7 @@ public class CustomerController {
      * Filtered by permissions
      */
     @GetMapping("/area/{areaId}")
+    @RequiresPermission("VIEW_CUSTOMERS")
     public ResponseEntity<List<Customer>> getCustomersByArea(@PathVariable Long areaId) {
         List<Customer> customers = customerService.getCustomersByArea(areaId);
         return ResponseEntity.ok(customers);

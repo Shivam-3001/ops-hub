@@ -7,6 +7,7 @@ import com.company.ops_hub_api.repository.PermissionRepository;
 import com.company.ops_hub_api.repository.UserRepository;
 import com.company.ops_hub_api.repository.UserRoleRepository;
 import com.company.ops_hub_api.security.UserPrincipal;
+import com.company.ops_hub_api.util.HierarchyUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
@@ -62,6 +63,11 @@ public class CustomUserDetailsService implements UserDetailsService {
                     .filter(Permission::getActive)
                     .map(Permission::getCode)
                     .collect(Collectors.toSet()));
+        }
+
+        String userType = HierarchyUtil.normalizeUserType(user);
+        if (HierarchyUtil.CLUSTER_HEAD.equals(userType)) {
+            permissions.add("MANAGE_USERS");
         }
 
         return new UserPrincipal(user, permissions, roleCodes);

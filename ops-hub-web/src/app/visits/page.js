@@ -14,7 +14,10 @@ export default function VisitsPage() {
   const [error, setError] = useState(null);
   const [showVisitModal, setShowVisitModal] = useState(false);
   const [showReviewModal, setShowReviewModal] = useState(false);
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [selectedVisit, setSelectedVisit] = useState(null);
+  const [visitHistory, setVisitHistory] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
   const [visitFormData, setVisitFormData] = useState({
     customerId: "",
     visitDate: new Date().toISOString().split("T")[0],
@@ -62,9 +65,14 @@ export default function VisitsPage() {
   const handleCreateVisit = async (e) => {
     e.preventDefault();
     try {
+      const now = new Date();
+      const selectedDate = visitFormData.visitDate || new Date().toISOString().split("T")[0];
+      const timePart = now.toISOString().split("T")[1];
+      const visitDateTime = new Date(`${selectedDate}T${timePart}`).toISOString();
       await api.createVisit({
         ...visitFormData,
         customerId: parseInt(visitFormData.customerId),
+        visitDate: visitDateTime,
       });
       setShowVisitModal(false);
       setVisitFormData({
@@ -114,6 +122,21 @@ export default function VisitsPage() {
       isPositive: true,
     });
     setShowReviewModal(true);
+  };
+
+  const openHistoryModal = async (visit) => {
+    setSelectedVisit(visit);
+    setShowHistoryModal(true);
+    try {
+      setHistoryLoading(true);
+      const data = await api.getVisits(visit.customerId);
+      setVisitHistory(data || []);
+    } catch (err) {
+      setVisitHistory([]);
+      console.error("Error loading visit history:", err);
+    } finally {
+      setHistoryLoading(false);
+    }
   };
 
   return (
@@ -220,13 +243,10 @@ export default function VisitsPage() {
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm">
                           <button
-                            onClick={() => {
-                              // View visit details
-                              alert(`Visit ID: ${visit.id}\nCustomer: ${visit.customerName}\nNotes: ${visit.notes || "No notes"}`);
-                            }}
+                            onClick={() => openHistoryModal(visit)}
                             className="text-slate-900 hover:text-slate-700 font-medium"
                           >
-                            View
+                            History
                           </button>
                         </td>
                       </tr>
@@ -385,6 +405,57 @@ export default function VisitsPage() {
                     </button>
                   </div>
                 </form>
+              </div>
+            </div>
+          )}
+
+          {showHistoryModal && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+              <div className="bg-white rounded-xl p-6 max-w-3xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-xl font-bold text-slate-900">Visit History</h3>
+                  <button
+                    onClick={() => setShowHistoryModal(false)}
+                    className="text-slate-500 hover:text-slate-900"
+                  >
+                    ✕
+                  </button>
+                </div>
+                <p className="text-sm text-slate-600 mb-4">
+                  {selectedVisit?.customerName || selectedVisit?.customerCode}
+                </p>
+
+                {historyLoading ? (
+                  <div className="text-center py-8">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-slate-900 mx-auto mb-2"></div>
+                    <p className="text-sm text-slate-600">Loading history...</p>
+                  </div>
+                ) : visitHistory.length === 0 ? (
+                  <p className="text-sm text-slate-600">No visit history available.</p>
+                ) : (
+                  <div className="space-y-3">
+                    {visitHistory.map((history) => (
+                      <div key={history.id} className="border border-slate-200 rounded-lg p-4">
+                        <div className="flex items-center justify-between">
+                          <div className="text-sm font-medium text-slate-900">
+                            {history.visitDate
+                              ? new Date(history.visitDate).toLocaleString()
+                              : "N/A"}
+                          </div>
+                          <span className="text-xs px-2 py-1 rounded-full bg-slate-100 text-slate-700">
+                            {history.visitStatus}
+                          </span>
+                        </div>
+                        {history.notes && (
+                          <p className="text-sm text-slate-600 mt-2">{history.notes}</p>
+                        )}
+                        {history.purpose && (
+                          <p className="text-xs text-slate-500 mt-1">Purpose: {history.purpose}</p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           )}

@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from "react";
 import AppLayout from "@/components/Layout/AppLayout";
-import PermissionGuard from "@/components/PermissionGuard";
 import api from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -30,19 +29,52 @@ export default function ProfilePage() {
 
   const loadProfile = async () => {
     try {
-      const data = await api.getMyProfile();
-      setProfile(data);
-      if (data) {
-        setFormData({
-          firstName: data.firstName || "",
-          lastName: data.lastName || "",
-          email: data.email || "",
-          phone: data.phone || "",
-          addressLine1: data.addressLine1 || "",
-          city: data.city || "",
-          state: data.state || "",
-          postalCode: data.postalCode || "",
-        });
+      setIsLoading(true);
+      // Try to get profile from API, but use user data from auth context as fallback
+      try {
+        const data = await api.getMyProfile();
+        setProfile(data);
+        if (data) {
+          setFormData({
+            firstName: data.firstName || "",
+            lastName: data.lastName || "",
+            email: data.email || "",
+            phone: data.phone || "",
+            addressLine1: data.addressLine1 || "",
+            city: data.city || "",
+            state: data.state || "",
+            postalCode: data.postalCode || "",
+          });
+        }
+      } catch (error) {
+        // If profile API fails, use user data from auth context
+        console.log("Profile API not available, using auth context data");
+        if (user) {
+          setProfile({
+            firstName: user.fullName?.split(' ')[0] || "",
+            lastName: user.fullName?.split(' ').slice(1).join(' ') || "",
+            email: user.email || "",
+            phone: user.phone || "",
+            employeeId: user.employeeId || "",
+            username: user.username || "",
+            userType: user.userType || "",
+            role: user.role || "",
+            areaName: user.areaName || "",
+            zoneName: user.zoneName || "",
+            circleName: user.circleName || "",
+            clusterName: user.clusterName || "",
+          });
+          setFormData({
+            firstName: user.fullName?.split(' ')[0] || "",
+            lastName: user.fullName?.split(' ').slice(1).join(' ') || "",
+            email: user.email || "",
+            phone: user.phone || "",
+            addressLine1: "",
+            city: "",
+            state: "",
+            postalCode: "",
+          });
+        }
       }
     } catch (error) {
       console.error("Error loading profile:", error);
@@ -54,9 +86,10 @@ export default function ProfilePage() {
   const loadRequests = async () => {
     try {
       const data = await api.getMyProfileRequests();
-      setRequests(data);
+      setRequests(data || []);
     } catch (error) {
       console.error("Error loading requests:", error);
+      setRequests([]);
     }
   };
 
@@ -88,6 +121,22 @@ export default function ProfilePage() {
     }
   };
 
+  // Use user data from auth context if profile is not loaded
+  const displayProfile = profile || (user ? {
+    firstName: user.fullName?.split(' ')[0] || "",
+    lastName: user.fullName?.split(' ').slice(1).join(' ') || "",
+    email: user.email || "",
+    phone: user.phone || "",
+    employeeId: user.employeeId || "",
+    username: user.username || "",
+    userType: user.userType || "",
+    role: user.role || "",
+    areaName: user.areaName || "",
+    zoneName: user.zoneName || "",
+    circleName: user.circleName || "",
+    clusterName: user.clusterName || "",
+  } : null);
+
   return (
     <AppLayout title="My Profile" subtitle="Manage your profile information">
       <div className="space-y-6">
@@ -108,33 +157,83 @@ export default function ProfilePage() {
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-slate-900 mx-auto mb-2"></div>
               <p className="text-sm text-slate-600">Loading...</p>
             </div>
-          ) : profile ? (
+          ) : displayProfile ? (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
+                <label className="text-sm font-medium text-slate-500">Employee ID</label>
+                <p className="text-slate-900 mt-1 font-medium">{displayProfile.employeeId || "N/A"}</p>
+              </div>
+              <div>
+                <label className="text-sm font-medium text-slate-500">Username</label>
+                <p className="text-slate-900 mt-1">{displayProfile.username || "N/A"}</p>
+              </div>
+              <div>
                 <label className="text-sm font-medium text-slate-500">First Name</label>
-                <p className="text-slate-900 mt-1">{profile.firstName || "N/A"}</p>
+                <p className="text-slate-900 mt-1">{displayProfile.firstName || "N/A"}</p>
               </div>
               <div>
                 <label className="text-sm font-medium text-slate-500">Last Name</label>
-                <p className="text-slate-900 mt-1">{profile.lastName || "N/A"}</p>
+                <p className="text-slate-900 mt-1">{displayProfile.lastName || "N/A"}</p>
               </div>
               <div>
                 <label className="text-sm font-medium text-slate-500">Email</label>
-                <p className="text-slate-900 mt-1">{profile.email || "N/A"}</p>
+                <p className="text-slate-900 mt-1">{displayProfile.email || "N/A"}</p>
               </div>
               <div>
                 <label className="text-sm font-medium text-slate-500">Phone</label>
-                <p className="text-slate-900 mt-1">{profile.phone || "N/A"}</p>
+                <p className="text-slate-900 mt-1">{displayProfile.phone || "N/A"}</p>
               </div>
-              <div className="md:col-span-2">
-                <label className="text-sm font-medium text-slate-500">Address</label>
+              <div>
+                <label className="text-sm font-medium text-slate-500">User Type</label>
                 <p className="text-slate-900 mt-1">
-                  {profile.addressLine1 || "N/A"}
-                  {profile.city && `, ${profile.city}`}
-                  {profile.state && `, ${profile.state}`}
-                  {profile.postalCode && ` ${profile.postalCode}`}
+                  <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded text-sm font-medium">
+                    {displayProfile.userType || displayProfile.role || "N/A"}
+                  </span>
                 </p>
               </div>
+              <div>
+                <label className="text-sm font-medium text-slate-500">Role</label>
+                <p className="text-slate-900 mt-1">
+                  <span className="px-2 py-1 bg-purple-100 text-purple-800 rounded text-sm font-medium">
+                    {displayProfile.role || "N/A"}
+                  </span>
+                </p>
+              </div>
+              {displayProfile.areaName && (
+                <div>
+                  <label className="text-sm font-medium text-slate-500">Area</label>
+                  <p className="text-slate-900 mt-1">{displayProfile.areaName}</p>
+                </div>
+              )}
+              {displayProfile.zoneName && (
+                <div>
+                  <label className="text-sm font-medium text-slate-500">Zone</label>
+                  <p className="text-slate-900 mt-1">{displayProfile.zoneName}</p>
+                </div>
+              )}
+              {displayProfile.circleName && (
+                <div>
+                  <label className="text-sm font-medium text-slate-500">Circle</label>
+                  <p className="text-slate-900 mt-1">{displayProfile.circleName}</p>
+                </div>
+              )}
+              {displayProfile.clusterName && (
+                <div>
+                  <label className="text-sm font-medium text-slate-500">Cluster</label>
+                  <p className="text-slate-900 mt-1">{displayProfile.clusterName}</p>
+                </div>
+              )}
+              {(displayProfile.addressLine1 || displayProfile.city || displayProfile.state || displayProfile.postalCode) && (
+                <div className="md:col-span-2">
+                  <label className="text-sm font-medium text-slate-500">Address</label>
+                  <p className="text-slate-900 mt-1">
+                    {displayProfile.addressLine1 || ""}
+                    {displayProfile.city && `, ${displayProfile.city}`}
+                    {displayProfile.state && `, ${displayProfile.state}`}
+                    {displayProfile.postalCode && ` ${displayProfile.postalCode}`}
+                  </p>
+                </div>
+              )}
             </div>
           ) : (
             <div className="text-center py-8">
@@ -174,7 +273,7 @@ export default function ProfilePage() {
                     </span>
                   </div>
                   <p className="text-xs text-slate-500">
-                    Submitted: {new Date(request.requestedAt).toLocaleString()}
+                    Submitted: {request.requestedAt ? new Date(request.requestedAt).toLocaleString() : "N/A"}
                   </p>
                   {request.reviewNotes && (
                     <p className="text-sm text-slate-600 mt-2">{request.reviewNotes}</p>

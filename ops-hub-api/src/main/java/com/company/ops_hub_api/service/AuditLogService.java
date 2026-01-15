@@ -28,50 +28,7 @@ public class AuditLogService {
     public void logAction(String actionType, String entityType, Long entityId, 
                          Map<String, Object> oldValues, Map<String, Object> newValues,
                          HttpServletRequest request) {
-        try {
-            AuditLog auditLog = new AuditLog();
-            
-            // Get current user
-            Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-            if (authentication != null && authentication.getPrincipal() instanceof com.company.ops_hub_api.security.UserPrincipal) {
-                com.company.ops_hub_api.security.UserPrincipal userPrincipal = 
-                    (com.company.ops_hub_api.security.UserPrincipal) authentication.getPrincipal();
-                Long userId = userPrincipal.getUserId();
-                if (userId != null) {
-                    userRepository.findById(userId).ifPresent(auditLog::setUser);
-                }
-            }
-
-            auditLog.setActionType(actionType);
-            auditLog.setEntityType(entityType);
-            if (entityId != null) {
-                auditLog.setEntityId(entityId);
-            }
-            
-            // Convert maps to JSON
-            if (oldValues != null && !oldValues.isEmpty()) {
-                auditLog.setOldValues(objectMapper.writeValueAsString(oldValues));
-            }
-            if (newValues != null && !newValues.isEmpty()) {
-                auditLog.setNewValues(objectMapper.writeValueAsString(newValues));
-            }
-
-            // Extract request information
-            if (request != null) {
-                auditLog.setIpAddress(getClientIpAddress(request));
-                auditLog.setUserAgent(request.getHeader("User-Agent"));
-                auditLog.setRequestUrl(request.getRequestURI());
-                auditLog.setRequestMethod(request.getMethod());
-            }
-
-            auditLog.setStatus("SUCCESS");
-            auditLog.setCreatedAt(LocalDateTime.now());
-
-            auditLogRepository.save(auditLog);
-        } catch (Exception e) {
-            log.error("Error creating audit log", e);
-            // Don't throw exception - audit logging should not break the main flow
-        }
+        logActionForUser(null, actionType, entityType, entityId, oldValues, newValues, request);
     }
 
     @Transactional
@@ -81,21 +38,27 @@ public class AuditLogService {
     }
 
     @Transactional
+    public void logActionForUser(Long actorUserId, String actionType, String entityType, Long entityId,
+                                 Map<String, Object> oldValues, Map<String, Object> newValues,
+                                 HttpServletRequest request) {
+        try {
+            AuditLog auditLog = new AuditLog();
+            setActor(auditLog, actorUserId);
+            populateLog(auditLog, actionType, entityType, entityId, oldValues, newValues, request);
+            auditLog.setStatus("SUCCESS");
+            auditLog.setCreatedAt(LocalDateTime.now());
+            auditLogRepository.save(auditLog);
+        } catch (Exception e) {
+            log.error("Error creating audit log", e);
+        }
+    }
+
+    @Transactional
     public void logError(String actionType, String entityType, Long entityId, 
                         String errorMessage, HttpServletRequest request) {
         try {
             AuditLog auditLog = new AuditLog();
-            
-            Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-            if (authentication != null && authentication.getPrincipal() instanceof com.company.ops_hub_api.security.UserPrincipal) {
-                com.company.ops_hub_api.security.UserPrincipal userPrincipal = 
-                    (com.company.ops_hub_api.security.UserPrincipal) authentication.getPrincipal();
-                Long userId = userPrincipal.getUserId();
-                if (userId != null) {
-                    userRepository.findById(userId).ifPresent(auditLog::setUser);
-                }
-            }
-
+            setActor(auditLog, null);
             auditLog.setActionType(actionType);
             auditLog.setEntityType(entityType);
             auditLog.setEntityId(entityId);
@@ -113,6 +76,44 @@ public class AuditLogService {
             auditLogRepository.save(auditLog);
         } catch (Exception e) {
             log.error("Error creating audit log for error", e);
+        }
+    }
+
+    private void setActor(AuditLog auditLog, Long actorUserId) {
+        if (actorUserId != null) {
+            userRepository.findById(actorUserId).ifPresent(auditLog::setUser);
+            return;
+        }
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication != null && authentication.getPrincipal() instanceof com.company.ops_hub_api.security.UserPrincipal) {
+            com.company.ops_hub_api.security.UserPrincipal userPrincipal =
+                (com.company.ops_hub_api.security.UserPrincipal) authentication.getPrincipal();
+            Long userId = userPrincipal.getUserId();
+            if (userId != null) {
+                userRepository.findById(userId).ifPresent(auditLog::setUser);
+            }
+        }
+    }
+
+    private void populateLog(AuditLog auditLog, String actionType, String entityType, Long entityId,
+                             Map<String, Object> oldValues, Map<String, Object> newValues,
+                             HttpServletRequest request) throws Exception {
+        auditLog.setActionType(actionType);
+        auditLog.setEntityType(entityType);
+        if (entityId != null) {
+            auditLog.setEntityId(entityId);
+        }
+        if (oldValues != null && !oldValues.isEmpty()) {
+            auditLog.setOldValues(objectMapper.writeValueAsString(oldValues));
+        }
+        if (newValues != null && !newValues.isEmpty()) {
+            auditLog.setNewValues(objectMapper.writeValueAsString(newValues));
+        }
+        if (request != null) {
+            auditLog.setIpAddress(getClientIpAddress(request));
+            auditLog.setUserAgent(request.getHeader("User-Agent"));
+            auditLog.setRequestUrl(request.getRequestURI());
+            auditLog.setRequestMethod(request.getMethod());
         }
     }
 

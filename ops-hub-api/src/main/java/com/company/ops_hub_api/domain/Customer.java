@@ -62,6 +62,12 @@ public class Customer {
     @Column(length = 100)
     private String country;
 
+    @Column(length = 150, name = "store_name")
+    private String storeName;
+
+    @Column(precision = 18, scale = 2, name = "pending_amount")
+    private java.math.BigDecimal pendingAmount;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "area_id")
     private Area area;

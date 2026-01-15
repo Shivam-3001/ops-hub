@@ -169,12 +169,12 @@ public class RbacDataSeeder {
     private void assignRolesToUsers() {
         List<User> users = userRepository.findAll();
         for (User user : users) {
-            String userRole = user.getRole();
+            String userType = com.company.ops_hub_api.util.HierarchyUtil.normalizeUserType(user);
             Role role = null;
 
-            if ("ADMIN".equalsIgnoreCase(userRole)) {
+            if (com.company.ops_hub_api.util.HierarchyUtil.ADMIN.equals(userType)) {
                 role = roleRepository.findByCode("ADMIN").orElse(null);
-            } else if ("MANAGER".equalsIgnoreCase(userRole) || user.getUserType().contains("LEAD")) {
+            } else if (com.company.ops_hub_api.util.HierarchyUtil.hierarchyLevel(userType) > 0) {
                 role = roleRepository.findByCode("LEAD").orElse(null);
             } else {
                 role = roleRepository.findByCode("AGENT").orElse(null);

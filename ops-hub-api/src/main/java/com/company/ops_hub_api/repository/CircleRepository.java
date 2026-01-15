@@ -10,6 +10,7 @@ import java.util.Optional;
 @Repository
 public interface CircleRepository extends JpaRepository<Circle, Long> {
     Optional<Circle> findByCode(String code);
+    Optional<Circle> findByNameIgnoreCase(String name);
     List<Circle> findByClusterId(Long clusterId);
     boolean existsByCode(String code);
 }

@@ -10,6 +10,7 @@ import com.company.ops_hub_api.repository.CustomerRepository;
 import com.company.ops_hub_api.repository.UserRepository;
 import com.company.ops_hub_api.repository.UserRoleRepository;
 import com.company.ops_hub_api.security.UserPrincipal;
+import com.company.ops_hub_api.util.HierarchyUtil;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -59,6 +60,9 @@ public class CustomerAllocationService {
         }
         User assignee = userRepository.findById(userId)
                 .orElseThrow(() -> new IllegalArgumentException("User not found"));
+
+        User allocator = getCurrentUser();
+        validateHierarchyAssignment(allocator, assignee);
         
         // Validate user has the required role
         Long assigneeId = assignee.getId();
@@ -73,8 +77,7 @@ public class CustomerAllocationService {
                     throw new IllegalStateException("Customer is already allocated to this user");
                 });
         
-        // Get current user (allocator)
-        User allocator = getCurrentUser();
+        // allocator already resolved
         
         // Create allocation
         CustomerAllocation allocation = new CustomerAllocation();
@@ -151,6 +154,9 @@ public class CustomerAllocationService {
         }
         User newAssignee = userRepository.findById(newUserId)
                 .orElseThrow(() -> new IllegalArgumentException("New user not found"));
+
+        User reassigner = getCurrentUser();
+        validateHierarchyAssignment(reassigner, newAssignee);
         
         // Validate new user has the required role
         Long newAssigneeId = newAssignee.getId();
@@ -159,8 +165,7 @@ public class CustomerAllocationService {
         }
         validateUserRole(newAssigneeId, dto.getRoleCode());
         
-        // Get current user (reassigner)
-        User reassigner = getCurrentUser();
+        // reassigner already resolved
         
         // Deactivate existing active allocations
         List<CustomerAllocation> activeAllocations = allocationRepository
@@ -308,12 +313,70 @@ public class CustomerAllocationService {
     }
 
     private void validateUserRole(Long userId, String requiredRoleCode) {
-        List<String> userRoles = userRoleRepository.findRoleCodesByUserId(userId);
-        if (!userRoles.contains(requiredRoleCode)) {
-            throw new IllegalArgumentException(
-                    String.format("User does not have the required role: %s. User has roles: %s", 
-                            requiredRoleCode, String.join(", ", userRoles)));
+        if (requiredRoleCode == null || requiredRoleCode.trim().isEmpty()) {
+            return;
         }
+        User assignee = userRepository.findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("User not found"));
+        String assigneeType = HierarchyUtil.normalizeUserType(assignee);
+        String requiredType = HierarchyUtil.normalizeUserType(requiredRoleCode);
+        if (!assigneeType.equals(requiredType)) {
+            throw new IllegalArgumentException(
+                    String.format("User does not have the required role: %s. User is %s",
+                            requiredRoleCode, assigneeType));
+        }
+    }
+
+    private void validateHierarchyAssignment(User allocator, User assignee) {
+        String allocatorType = HierarchyUtil.normalizeUserType(allocator);
+        String assigneeType = HierarchyUtil.normalizeUserType(assignee);
+
+        if (HierarchyUtil.ADMIN.equals(allocatorType)) {
+            return;
+        }
+
+        int allocatorLevel = HierarchyUtil.hierarchyLevel(allocatorType);
+        int assigneeLevel = HierarchyUtil.hierarchyLevel(assigneeType);
+
+        if (allocatorLevel < 0 || assigneeLevel < 0) {
+            throw new AccessDeniedException("Invalid hierarchy configuration for assignment");
+        }
+
+        if (allocatorLevel == 0) {
+            throw new AccessDeniedException("Lowest hierarchy level cannot assign customers");
+        }
+
+        if (assigneeLevel != allocatorLevel - 1) {
+            throw new AccessDeniedException("You can only assign to the next lower hierarchy level");
+        }
+
+        if (!isWithinScope(allocatorType, allocator, assignee)) {
+            throw new AccessDeniedException("You can only assign within your hierarchy scope");
+        }
+    }
+
+    private boolean isWithinScope(String allocatorType, User allocator, User assignee) {
+        if (HierarchyUtil.CLUSTER_HEAD.equals(allocatorType)) {
+            Long allocatorCluster = HierarchyUtil.getClusterId(allocator);
+            Long assigneeCluster = HierarchyUtil.getClusterId(assignee);
+            return allocatorCluster != null && allocatorCluster.equals(assigneeCluster);
+        }
+        if (HierarchyUtil.CIRCLE_HEAD.equals(allocatorType)) {
+            Long allocatorCircle = HierarchyUtil.getCircleId(allocator);
+            Long assigneeCircle = HierarchyUtil.getCircleId(assignee);
+            return allocatorCircle != null && allocatorCircle.equals(assigneeCircle);
+        }
+        if (HierarchyUtil.ZONE_HEAD.equals(allocatorType)) {
+            Long allocatorZone = HierarchyUtil.getZoneId(allocator);
+            Long assigneeZone = HierarchyUtil.getZoneId(assignee);
+            return allocatorZone != null && allocatorZone.equals(assigneeZone);
+        }
+        if (HierarchyUtil.AREA_HEAD.equals(allocatorType) || HierarchyUtil.STORE_HEAD.equals(allocatorType)) {
+            Long allocatorArea = HierarchyUtil.getAreaId(allocator);
+            Long assigneeArea = HierarchyUtil.getAreaId(assignee);
+            return allocatorArea != null && allocatorArea.equals(assigneeArea);
+        }
+        return false;
     }
 
     private User getCurrentUser() {

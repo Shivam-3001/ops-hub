@@ -54,7 +54,7 @@ public class Payment {
     private String gatewayTransactionId;
 
     @Column(nullable = false, length = 50, name = "payment_status")
-    private String paymentStatus = "PENDING"; // PENDING, PROCESSING, SUCCESS, FAILED, REFUNDED
+    private String paymentStatus = "INITIATED"; // INITIATED, SUCCESS, FAILED, REFUNDED
 
     @Column(name = "payment_date")
     private LocalDateTime paymentDate;

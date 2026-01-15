@@ -58,29 +58,16 @@ public class ProfileUpdateRequestController {
 
     /**
      * Get a specific request by ID
+     * Users can view their own requests, or all requests if they have APPROVE_PROFILE permission
      */
     @GetMapping("/{id}")
     public ResponseEntity<ProfileUpdateRequestDTO> getRequest(@PathVariable Long id) {
-        // Users can only view their own requests unless they have approval permission
-        // This logic should be in the service, but for simplicity, we'll check here
-        ProfileUpdateRequest request = requestService.getMyRequests().stream()
-                .filter(r -> r.getId().equals(id))
-                .findFirst()
-                .orElse(null);
-        
-        if (request == null) {
-            // Check if user has approval permission and request exists in pending
-            List<ProfileUpdateRequest> pending = requestService.getPendingRequests();
-            request = pending.stream()
-                    .filter(r -> r.getId().equals(id))
-                    .findFirst()
-                    .orElse(null);
-        }
-        
+        // Service layer handles permission checks - users can only view their own requests
+        // unless they have APPROVE_PROFILE permission
+        ProfileUpdateRequest request = requestService.getRequestById(id);
         if (request == null) {
             return ResponseEntity.notFound().build();
         }
-        
         return ResponseEntity.ok(toDTO(request));
     }
 

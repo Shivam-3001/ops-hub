@@ -9,6 +9,7 @@ import com.company.ops_hub_api.repository.ProfileUpdateRequestRepository;
 import com.company.ops_hub_api.repository.UserProfileRepository;
 import com.company.ops_hub_api.repository.UserRepository;
 import com.company.ops_hub_api.security.UserPrincipal;
+import com.company.ops_hub_api.util.HierarchyUtil;
 import com.company.ops_hub_api.util.EncryptionUtil;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.HttpServletRequest;
@@ -110,7 +111,10 @@ public class ProfileUpdateRequestService {
     @Transactional(readOnly = true)
     public List<ProfileUpdateRequest> getPendingRequests() {
         checkApprovalPermission();
-        return requestRepository.findPendingRequests("PENDING");
+        User reviewer = getCurrentUser();
+        return requestRepository.findPendingRequests("PENDING").stream()
+                .filter(request -> canReviewRequest(reviewer, request.getUser()))
+                .toList();
     }
 
     /**
@@ -120,6 +124,36 @@ public class ProfileUpdateRequestService {
     public List<ProfileUpdateRequest> getMyRequests() {
         User currentUser = getCurrentUser();
         return requestRepository.findByUserId(currentUser.getId());
+    }
+
+    /**
+     * Get a specific request by ID
+     * Users can only view their own requests unless they have APPROVE_PROFILE permission
+     */
+    @Transactional(readOnly = true)
+    public ProfileUpdateRequest getRequestById(Long requestId) {
+        if (requestId == null) {
+            throw new IllegalArgumentException("Request ID cannot be null");
+        }
+        
+        ProfileUpdateRequest request = requestRepository.findById(requestId)
+                .orElseThrow(() -> new IllegalArgumentException("Profile update request not found"));
+        
+        User currentUser = getCurrentUser();
+        Long currentUserId = currentUser.getId();
+        
+        // Check if user owns the request or can review based on hierarchy
+        boolean isOwner = request.getUser() != null && 
+                request.getUser().getId() != null && 
+                request.getUser().getId().equals(currentUserId);
+
+        boolean canReview = canReviewRequest(currentUser, request.getUser());
+
+        if (!isOwner && !canReview) {
+            throw new AccessDeniedException("You do not have permission to view this request");
+        }
+        
+        return request;
     }
 
     /**
@@ -136,6 +170,10 @@ public class ProfileUpdateRequestService {
         ProfileUpdateRequest request = requestRepository.findById(requestId)
                 .orElseThrow(() -> new IllegalArgumentException("Profile update request not found"));
 
+        if (!canReviewRequest(getCurrentUser(), request.getUser())) {
+            throw new AccessDeniedException("You do not have permission to approve this request");
+        }
+
         if (!"PENDING".equals(request.getStatus())) {
             throw new IllegalStateException("Only PENDING requests can be approved");
         }
@@ -144,6 +182,9 @@ public class ProfileUpdateRequestService {
         Long reviewerId = reviewer.getId();
         if (reviewerId == null) {
             throw new IllegalStateException("Reviewer ID cannot be null");
+        }
+        if (!canReviewRequest(reviewer, request.getUser())) {
+            throw new AccessDeniedException("You do not have permission to approve this request");
         }
         
         request.setReviewedBy(reviewer);
@@ -211,11 +252,18 @@ public class ProfileUpdateRequestService {
         ProfileUpdateRequest request = requestRepository.findById(requestId)
                 .orElseThrow(() -> new IllegalArgumentException("Profile update request not found"));
 
+        if (!canReviewRequest(getCurrentUser(), request.getUser())) {
+            throw new AccessDeniedException("You do not have permission to reject this request");
+        }
+
         if (!"PENDING".equals(request.getStatus())) {
             throw new IllegalStateException("Only PENDING requests can be rejected");
         }
 
         User reviewer = getCurrentUser();
+        if (!canReviewRequest(reviewer, request.getUser())) {
+            throw new AccessDeniedException("You do not have permission to reject this request");
+        }
         request.setReviewedBy(reviewer);
         request.setReviewedAt(LocalDateTime.now());
         request.setStatus("REJECTED");
@@ -268,6 +316,46 @@ public class ProfileUpdateRequestService {
         if (!userPrincipal.hasPermission("APPROVE_PROFILE")) {
             throw new AccessDeniedException("Insufficient permissions to approve profile updates");
         }
+    }
+
+    private boolean canReviewRequest(User reviewer, User targetUser) {
+        if (reviewer == null || targetUser == null) {
+            return false;
+        }
+        String reviewerType = HierarchyUtil.normalizeUserType(reviewer);
+        String targetType = HierarchyUtil.normalizeUserType(targetUser);
+
+        if (HierarchyUtil.ADMIN.equals(reviewerType)) {
+            return true;
+        }
+        if (!HierarchyUtil.isAbove(reviewerType, targetType)) {
+            return false;
+        }
+
+        Long reviewerCluster = HierarchyUtil.getClusterId(reviewer);
+        Long reviewerCircle = HierarchyUtil.getCircleId(reviewer);
+        Long reviewerZone = HierarchyUtil.getZoneId(reviewer);
+        Long reviewerArea = HierarchyUtil.getAreaId(reviewer);
+
+        Long targetCluster = HierarchyUtil.getClusterId(targetUser);
+        Long targetCircle = HierarchyUtil.getCircleId(targetUser);
+        Long targetZone = HierarchyUtil.getZoneId(targetUser);
+        Long targetArea = HierarchyUtil.getAreaId(targetUser);
+
+        if (HierarchyUtil.CLUSTER_HEAD.equals(reviewerType)) {
+            return reviewerCluster != null && reviewerCluster.equals(targetCluster);
+        }
+        if (HierarchyUtil.CIRCLE_HEAD.equals(reviewerType)) {
+            return reviewerCircle != null && reviewerCircle.equals(targetCircle);
+        }
+        if (HierarchyUtil.ZONE_HEAD.equals(reviewerType)) {
+            return reviewerZone != null && reviewerZone.equals(targetZone);
+        }
+        if (HierarchyUtil.AREA_HEAD.equals(reviewerType) || HierarchyUtil.STORE_HEAD.equals(reviewerType)) {
+            return reviewerArea != null && reviewerArea.equals(targetArea);
+        }
+
+        return false;
     }
 
     private String encryptProfileData(SubmitProfileUpdateRequestDTO dto) {
