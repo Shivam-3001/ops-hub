@@ -353,7 +353,20 @@ class ApiClient {
   }
 
   async sendAiMessage(data) {
-    return this.request('/ai/message', {
+    return this.request('/ai/ask', {
+      method: 'POST',
+      body: JSON.stringify({
+        question: data.message,
+        conversationId: data.conversationId || null,
+        currentPage: data.currentPage,
+        currentModule: data.currentModule,
+        context: data.context || {},
+      }),
+    });
+  }
+
+  async askAi(data) {
+    return this.request('/ai/ask', {
       method: 'POST',
       body: JSON.stringify(data),
     });

@@ -9,7 +9,6 @@ import com.company.ops_hub_api.repository.AiConversationRepository;
 import com.company.ops_hub_api.repository.UserRepository;
 import com.company.ops_hub_api.security.UserPrincipal;
 import com.company.ops_hub_api.util.HierarchyUtil;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -19,9 +18,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDateTime;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * AI Agent Service
@@ -35,8 +32,7 @@ public class AiAgentService {
     private final AiConversationRepository conversationRepository;
     private final AiActionRepository actionRepository;
     private final UserRepository userRepository;
-    private final AuditLogService auditLogService;
-    private final ObjectMapper objectMapper;
+    private final AiAskService aiAskService;
 
     /**
      * Get AI context for current user
@@ -81,42 +77,23 @@ public class AiAgentService {
      */
     @Transactional
     public AiMessageResponseDTO processMessage(AiMessageRequestDTO request, HttpServletRequest httpRequest) {
-        // Check permission to use AI agent
-        checkAiAgentPermission();
-
-        UserPrincipal userPrincipal = getCurrentUserPrincipal();
-        Long userId = userPrincipal.getUserId();
-        if (userId == null) {
-            throw new IllegalStateException("User ID cannot be null");
-        }
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new IllegalArgumentException("User not found"));
-
-        // Get or create conversation
-        AiConversation conversation = getOrCreateConversation(request.getConversationId(), user);
-
-        // Get AI context
-        AiContextDTO context = getAiContext(request.getCurrentPage(), request.getCurrentModule(), request.getContext());
-
-        // TODO: Integrate with actual AI/LLM service here
-        // For now, we simulate AI response
-        String aiResponse = generateAiResponse(request.getMessage(), context);
-
-        // Actions are disabled per business rules (read & summarize only)
-        List<AiActionSuggestionDTO> suggestedActions = new ArrayList<>();
-
-        // Update conversation context
-        updateConversationContext(conversation, request, context);
-
-        // Log conversation
-        logAiConversation(conversation, request.getMessage(), aiResponse, httpRequest);
+        AiAskResponseDTO response = aiAskService.ask(
+                new AiAskRequestDTO(
+                        request.getMessage(),
+                        request.getConversationId(),
+                        request.getCurrentPage(),
+                        request.getCurrentModule(),
+                        request.getContext()
+                ),
+                httpRequest
+        );
 
         return AiMessageResponseDTO.builder()
-                .conversationId(conversation.getConversationId())
-                .response(aiResponse)
-                .suggestedActions(suggestedActions)
+                .conversationId(response.getConversationId())
+                .response(response.getResponse())
+                .suggestedActions(new ArrayList<>())
                 .requiresConfirmation(false)
-                .context(context)
+                .context(getAiContext(request.getCurrentPage(), request.getCurrentModule(), request.getContext()))
                 .build();
     }
 
@@ -175,68 +152,6 @@ public class AiAgentService {
             return (UserPrincipal) authentication.getPrincipal();
         }
         return null;
-    }
-
-    private AiConversation getOrCreateConversation(String conversationId, User user) {
-        if (conversationId != null && !conversationId.isEmpty()) {
-            return conversationRepository.findByConversationId(conversationId)
-                    .orElseGet(() -> createNewConversation(user, "AI Conversation"));
-        }
-        return createNewConversation(user, "AI Conversation");
-    }
-
-    private AiConversation createNewConversation(User user, String title) {
-        AiConversation conversation = new AiConversation();
-        conversation.setUser(user);
-        conversation.setConversationId(UUID.randomUUID().toString());
-        conversation.setTitle(title);
-        conversation.setStatus("ACTIVE");
-        conversation.setModelName("default"); // TODO: Configure model name
-        return conversationRepository.save(conversation);
-    }
-
-    private void updateConversationContext(AiConversation conversation, AiMessageRequestDTO request, AiContextDTO context) {
-        try {
-            Map<String, Object> contextData = new HashMap<>();
-            contextData.put("currentPage", request.getCurrentPage());
-            contextData.put("currentModule", request.getCurrentModule());
-            contextData.put("userContext", context);
-            contextData.put("lastMessage", request.getMessage());
-            contextData.put("updatedAt", LocalDateTime.now().toString());
-
-            conversation.setContextData(objectMapper.writeValueAsString(contextData));
-            conversation.setUpdatedAt(LocalDateTime.now());
-            conversationRepository.save(conversation);
-        } catch (Exception e) {
-            log.error("Error updating conversation context", e);
-        }
-    }
-
-    private String generateAiResponse(String message, AiContextDTO context) {
-        // TODO: Integrate with actual AI/LLM service
-        // This is a placeholder that simulates AI response
-        return String.format(
-                "I understand you're asking about: %s. " +
-                "Based on your role (%s) and permissions, I can summarize and explain the data you can access.",
-                message,
-                String.join(", ", context.getRoles())
-        );
-    }
-
-    private void logAiConversation(AiConversation conversation, String message, String response, HttpServletRequest request) {
-        try {
-            Map<String, Object> conversationData = new HashMap<>();
-            conversationData.put("conversationId", conversation.getConversationId());
-            conversationData.put("message", message);
-            conversationData.put("response", response);
-            conversationData.put("messageLength", message.length());
-            conversationData.put("responseLength", response.length());
-
-            auditLogService.logAction("AI_CONVERSATION", "AI_CONVERSATION", conversation.getId(), 
-                    null, conversationData, request);
-        } catch (Exception e) {
-            log.error("Error logging AI conversation", e);
-        }
     }
 
 }

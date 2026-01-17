@@ -5,6 +5,7 @@ import com.company.ops_hub_api.domain.AiConversation;
 import com.company.ops_hub_api.dto.*;
 import com.company.ops_hub_api.security.RequiresPermission;
 import com.company.ops_hub_api.service.AiAgentService;
+import com.company.ops_hub_api.service.AiAskService;
 import jakarta.validation.Valid;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
@@ -24,6 +25,7 @@ import java.util.Map;
 public class AiAgentController {
 
     private final AiAgentService aiAgentService;
+    private final AiAskService aiAskService;
 
     /**
      * Get AI context for current user
@@ -47,6 +49,18 @@ public class AiAgentController {
             @Valid @RequestBody AiMessageRequestDTO request,
             HttpServletRequest httpRequest) {
         AiMessageResponseDTO response = aiAgentService.processMessage(request, httpRequest);
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * Ask AI assistant (read-only)
+     */
+    @RequiresPermission("USE_AI_AGENT")
+    @PostMapping("/ask")
+    public ResponseEntity<AiAskResponseDTO> askAi(
+            @Valid @RequestBody AiAskRequestDTO request,
+            HttpServletRequest httpRequest) {
+        AiAskResponseDTO response = aiAskService.ask(request, httpRequest);
         return ResponseEntity.ok(response);
     }
 

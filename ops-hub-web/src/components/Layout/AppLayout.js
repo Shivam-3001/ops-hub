@@ -4,6 +4,7 @@ import Sidebar from './Sidebar';
 import RightSidebar from './RightSidebar';
 import Header from './Header';
 import ProtectedRoute from '@/components/ProtectedRoute';
+import AiFloatingWidget from '@/components/AiFloatingWidget';
 
 export default function AppLayout({ children, title, subtitle }) {
   return (
@@ -15,6 +16,7 @@ export default function AppLayout({ children, title, subtitle }) {
           <main className="p-8">{children}</main>
         </div>
         <RightSidebar />
+        <AiFloatingWidget />
       </div>
     </ProtectedRoute>
   );

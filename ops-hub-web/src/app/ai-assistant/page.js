@@ -68,11 +68,12 @@ export default function AiAssistantPage() {
     setError(null);
 
     try {
-      const response = await api.sendAiMessage({
-        message: inputMessage,
-        conversationId: selectedConversation?.id || null,
+      const response = await api.askAi({
+        question: inputMessage,
+        conversationId: selectedConversation?.conversationId || null,
         currentPage: pathname,
         currentModule: "ai-assistant",
+        context: {},
       });
 
       const aiMessage = {
@@ -168,7 +169,7 @@ export default function AiAssistantPage() {
                   <button
                     key={conv.id}
                     onClick={() => {
-                      setSelectedConversation(conv);
+                    setSelectedConversation(conv);
                       // Load conversation messages
                       setMessages([]);
                     }}
@@ -179,7 +180,7 @@ export default function AiAssistantPage() {
                     }`}
                   >
                     <div className="font-medium text-sm truncate">
-                      {conv.title || `Conversation ${conv.id}`}
+                      {conv.title || `Conversation ${conv.conversationId || conv.id}`}
                     </div>
                     <div
                       className={`text-xs mt-1 ${

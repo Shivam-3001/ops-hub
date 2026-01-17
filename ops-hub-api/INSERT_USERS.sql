@@ -4,8 +4,8 @@
 -- Run this script in your MS SQL Server database
 -- 
 -- STEP 1: First, get BCrypt hashes by calling:
---   http://localhost:8080/api/auth/generate-hash?password=admin123
---   http://localhost:8080/api/auth/generate-hash?password=password123
+--   http://localhost:8080/api/auth/generate-hash?password=Jan@2026
+--   http://localhost:8080/api/auth/generate-hash?password=Ops@2026
 -- 
 -- STEP 2: Replace the hash placeholders below with the actual hashes
 -- STEP 3: Run this script
@@ -15,67 +15,72 @@ GO
 
 -- Get or create area_id (required for users)
 DECLARE @AreaId BIGINT;
-DECLARE @MeerutAreaId BIGINT;
+DECLARE @SecondaryAreaId BIGINT;
 
--- Try to find existing areas
-SELECT TOP 1 @AreaId = id FROM areas ORDER BY id;
+-- Password hashes (replace placeholders with actual BCrypt hashes)
+DECLARE @HashAdmin NVARCHAR(255) = '$2a$12$M9uX4SmUbliutLybP.GzHuSy0ubeuCsCnxiVQEiUruQ85vsrAkoc6';
+DECLARE @HashUsers NVARCHAR(255) = '$2a$12$Ld8ooygBdMYwgrXH9iaNRe7d9jSGUSOi807snO9Kav2BUY1CysUcq';
 
--- If no areas exist, create minimal hierarchy
+-- Try to find existing areas (prefer Sector 63 and Indirapuram)
+SELECT @AreaId = id FROM areas WHERE code = 'SECTOR_63';
+SELECT @SecondaryAreaId = id FROM areas WHERE code = 'INDIRAPURAM';
+
+-- If no areas exist, create minimal hierarchy aligned to final mapping
 IF @AreaId IS NULL
 BEGIN
     -- Cluster
-    IF NOT EXISTS (SELECT 1 FROM clusters WHERE code = 'BUP')
+    IF NOT EXISTS (SELECT 1 FROM clusters WHERE code = 'NORTH')
         INSERT INTO clusters (code, name, description, active, created_at, updated_at)
-        VALUES ('BUP', 'Bihar UP', 'Cluster', 1, GETDATE(), GETDATE());
+        VALUES ('NORTH', 'North', 'Cluster', 1, GETDATE(), GETDATE());
     
-    DECLARE @ClusterId BIGINT = (SELECT id FROM clusters WHERE code = 'BUP');
+    DECLARE @ClusterId BIGINT = (SELECT id FROM clusters WHERE code = 'NORTH');
     
     -- Circle
-    IF NOT EXISTS (SELECT 1 FROM circles WHERE code = 'UP')
+    IF NOT EXISTS (SELECT 1 FROM circles WHERE code = 'UTTAR_PRADESH')
         INSERT INTO circles (code, name, description, cluster_id, active, created_at, updated_at)
-        VALUES ('UP', 'Uttar Pradesh', 'Circle', @ClusterId, 1, GETDATE(), GETDATE());
+        VALUES ('UTTAR_PRADESH', 'Uttar Pradesh', 'Circle', @ClusterId, 1, GETDATE(), GETDATE());
     
-    DECLARE @CircleId BIGINT = (SELECT id FROM circles WHERE code = 'UP');
+    DECLARE @CircleId BIGINT = (SELECT id FROM circles WHERE code = 'UTTAR_PRADESH');
     
     -- Zone
-    IF NOT EXISTS (SELECT 1 FROM zones WHERE code = 'GZB')
+    IF NOT EXISTS (SELECT 1 FROM zones WHERE code = 'NOIDA')
         INSERT INTO zones (code, name, description, circle_id, active, created_at, updated_at)
-        VALUES ('GZB', 'Ghaziabad', 'Zone', @CircleId, 1, GETDATE(), GETDATE());
+        VALUES ('NOIDA', 'Noida', 'Zone', @CircleId, 1, GETDATE(), GETDATE());
     
-    DECLARE @ZoneId BIGINT = (SELECT id FROM zones WHERE code = 'GZB');
+    DECLARE @ZoneId BIGINT = (SELECT id FROM zones WHERE code = 'NOIDA');
     
-    -- Area (Behrampur)
-    IF NOT EXISTS (SELECT 1 FROM areas WHERE code = 'BHR')
+    -- Area (Sector 63)
+    IF NOT EXISTS (SELECT 1 FROM areas WHERE code = 'SECTOR_63')
         INSERT INTO areas (code, name, description, zone_id, active, created_at, updated_at)
-        VALUES ('BHR', 'Behrampur', 'Area', @ZoneId, 1, GETDATE(), GETDATE());
+        VALUES ('SECTOR_63', 'Sector 63', 'Area', @ZoneId, 1, GETDATE(), GETDATE());
     
-    -- Area (Meerut)
-    IF NOT EXISTS (SELECT 1 FROM areas WHERE code = 'MRT')
+    -- Area (Indirapuram)
+    IF NOT EXISTS (SELECT 1 FROM areas WHERE code = 'INDIRAPURAM')
         INSERT INTO areas (code, name, description, zone_id, active, created_at, updated_at)
-        VALUES ('MRT', 'Meerut', 'Area', @ZoneId, 1, GETDATE(), GETDATE());
+        VALUES ('INDIRAPURAM', 'Indirapuram', 'Area', @ZoneId, 1, GETDATE(), GETDATE());
 END
 
-SET @AreaId = (SELECT id FROM areas WHERE code = 'BHR');
-SET @MeerutAreaId = (SELECT id FROM areas WHERE code = 'MRT');
-IF @MeerutAreaId IS NULL SET @MeerutAreaId = @AreaId;
+SET @AreaId = (SELECT id FROM areas WHERE code = 'SECTOR_63');
+SET @SecondaryAreaId = (SELECT id FROM areas WHERE code = 'INDIRAPURAM');
+IF @SecondaryAreaId IS NULL SET @SecondaryAreaId = @AreaId;
 
 -- ============================================
 -- INSERT USERS
 -- ============================================
 -- IMPORTANT: Get BCrypt hashes first from:
--- GET http://localhost:8080/api/auth/generate-hash?password=admin123
--- GET http://localhost:8080/api/auth/generate-hash?password=password123
+-- GET http://localhost:8080/api/auth/generate-hash?password=Jan@2026
+-- GET http://localhost:8080/api/auth/generate-hash?password=Ops@2026
 --
--- Then replace HASH_PLACEHOLDER_ADMIN123 and HASH_PLACEHOLDER_PASSWORD123 below
+-- Then replace HASH_PLACEHOLDER_ADMIN and HASH_PLACEHOLDER_USERS below
 
--- EMP004 - Admin (password: admin123)
+-- EMP004 - Admin (username: shivam, password: Jan@2026)
 IF NOT EXISTS (SELECT 1 FROM users WHERE employee_id = 'EMP004')
 BEGIN
     INSERT INTO users (employee_id, username, password_hash, email, full_name, phone, user_type, role, area_id, active, two_factor_enabled, created_at, updated_at)
     VALUES (
         'EMP004',
-        'admin',
-        '$2a$12$OUaQ2NQafXckT/mHz1F4YOz9R4QHve2hKBfyhLsB8vbqgbJhzWb1O', 
+        'shivam',
+        @HashAdmin,
         'admin@example.com',
         'Admin User',
         '9876543213',
@@ -89,19 +94,19 @@ BEGIN
     );
 END
 
--- EMP001 - Area Lead (password: password123)
+-- EMP001 - Area Head (password: Ops@2026)
 IF NOT EXISTS (SELECT 1 FROM users WHERE employee_id = 'EMP001')
 BEGIN
     INSERT INTO users (employee_id, username, password_hash, email, full_name, phone, user_type, role, area_id, active, two_factor_enabled, created_at, updated_at)
     VALUES (
         'EMP001',
-        'shivam',
-        '$2a$12$YYkT66reMqxChvJ28SCdpOd07hzjPOeZOJq5rYY5X7IWYB97gYls.', -- Replace with hash from /api/auth/generate-hash?password=password123
+        'shivam-area',
+        @HashUsers,
         'shivam@example.com',
         'Shivam Kumar',
         '9876543210',
-        'AREA_LEAD',
-        'MANAGER',
+        'AREA_HEAD',
+        'AREA_HEAD',
         @AreaId,
         1,
         0,
@@ -110,19 +115,19 @@ BEGIN
     );
 END
 
--- EMP002 - Zone Lead (password: password123)
+-- EMP002 - Zone Head (password: Ops@2026)
 IF NOT EXISTS (SELECT 1 FROM users WHERE employee_id = 'EMP002')
 BEGIN
     INSERT INTO users (employee_id, username, password_hash, email, full_name, phone, user_type, role, area_id, active, two_factor_enabled, created_at, updated_at)
     VALUES (
         'EMP002',
         'rahul',
-        '$2a$12$YYkT66reMqxChvJ28SCdpOd07hzjPOeZOJq5rYY5X7IWYB97gYls.', -- Same hash as password123
+        @HashUsers,
         'rahul@example.com',
         'Rahul Sharma',
         '9876543211',
-        'ZONE_LEAD',
-        'MANAGER',
+        'ZONE_HEAD',
+        'ZONE_HEAD',
         @AreaId,
         1,
         0,
@@ -131,19 +136,19 @@ BEGIN
     );
 END
 
--- EMP003 - Circle Lead (password: password123)
+-- EMP003 - Circle Head (password: Ops@2026)
 IF NOT EXISTS (SELECT 1 FROM users WHERE employee_id = 'EMP003')
 BEGIN
     INSERT INTO users (employee_id, username, password_hash, email, full_name, phone, user_type, role, area_id, active, two_factor_enabled, created_at, updated_at)
     VALUES (
         'EMP003',
         'priya',
-        '$2a$12$YYkT66reMqxChvJ28SCdpOd07hzjPOeZOJq5rYY5X7IWYB97gYls.', -- Same hash as password123
+        @HashUsers,
         'priya@example.com',
         'Priya Singh',
         '9876543212',
-        'CIRCLE_LEAD',
-        'MANAGER',
+        'CIRCLE_HEAD',
+        'CIRCLE_HEAD',
         @AreaId,
         1,
         0,
@@ -152,20 +157,20 @@ BEGIN
     );
 END
 
--- EMP005 - Analyst (password: password123)
+-- EMP005 - Agent (password: Ops@2026)
 IF NOT EXISTS (SELECT 1 FROM users WHERE employee_id = 'EMP005')
 BEGIN
     INSERT INTO users (employee_id, username, password_hash, email, full_name, phone, user_type, role, area_id, active, two_factor_enabled, created_at, updated_at)
     VALUES (
         'EMP005',
-        'analyst1',
-        '$2a$12$YYkT66reMqxChvJ28SCdpOd07hzjPOeZOJq5rYY5X7IWYB97gYls.', -- Same hash as password123
-        'analyst1@example.com',
-        'Analyst One',
+        'agent1',
+        @HashUsers,
+        'agent1@example.com',
+        'Agent One',
         '9876543214',
-        'ANALYST',
-        'ANALYST',
-        @MeerutAreaId,
+        'AGENT',
+        'AGENT',
+        @SecondaryAreaId,
         1,
         0,
         GETDATE(),
@@ -173,20 +178,20 @@ BEGIN
     );
 END
 
--- EMP006 - Zone Lead (password: password123)
+-- EMP006 - Store Head (password: Ops@2026)
 IF NOT EXISTS (SELECT 1 FROM users WHERE employee_id = 'EMP006')
 BEGIN
     INSERT INTO users (employee_id, username, password_hash, email, full_name, phone, user_type, role, area_id, active, two_factor_enabled, created_at, updated_at)
     VALUES (
         'EMP006',
-        'manager1',
-        '$2a$12$YYkT66reMqxChvJ28SCdpOd07hzjPOeZOJq5rYY5X7IWYB97gYls.', -- Same hash as password123
-        'manager1@example.com',
-        'Manager One',
+        'store1',
+        @HashUsers,
+        'store1@example.com',
+        'Store Head One',
         '9876543215',
-        'ZONE_LEAD',
-        'MANAGER',
-        @MeerutAreaId,
+        'STORE_HEAD',
+        'STORE_HEAD',
+        @SecondaryAreaId,
         1,
         0,
         GETDATE(),
@@ -194,10 +199,55 @@ BEGIN
     );
 END
 
+-- EMP007 - Cluster Head (password: Ops@2026)
+IF NOT EXISTS (SELECT 1 FROM users WHERE employee_id = 'EMP007')
+BEGIN
+    INSERT INTO users (employee_id, username, password_hash, email, full_name, phone, user_type, role, area_id, active, two_factor_enabled, created_at, updated_at)
+    VALUES (
+        'EMP007',
+        'cluster1',
+        @HashUsers,
+        'cluster1@example.com',
+        'Cluster Head One',
+        '9876543216',
+        'CLUSTER_HEAD',
+        'CLUSTER_HEAD',
+        @AreaId,
+        1,
+        0,
+        GETDATE(),
+        GETDATE()
+    );
+END
+
+-- Assign user_roles based on roles table (required for permissions)
+DECLARE @AdminRoleId BIGINT = (SELECT id FROM roles WHERE code = 'ADMIN');
+DECLARE @ClusterRoleId BIGINT = (SELECT id FROM roles WHERE code = 'CLUSTER_HEAD');
+DECLARE @CircleRoleId BIGINT = (SELECT id FROM roles WHERE code = 'CIRCLE_HEAD');
+DECLARE @ZoneRoleId BIGINT = (SELECT id FROM roles WHERE code = 'ZONE_HEAD');
+DECLARE @AreaRoleId BIGINT = (SELECT id FROM roles WHERE code = 'AREA_HEAD');
+DECLARE @StoreRoleId BIGINT = (SELECT id FROM roles WHERE code = 'STORE_HEAD');
+DECLARE @AgentRoleId BIGINT = (SELECT id FROM roles WHERE code = 'AGENT');
+
+IF NOT EXISTS (SELECT 1 FROM user_roles WHERE user_id = (SELECT id FROM users WHERE employee_id = 'EMP004') AND role_id = @AdminRoleId)
+    INSERT INTO user_roles (user_id, role_id, created_at) VALUES ((SELECT id FROM users WHERE employee_id = 'EMP004'), @AdminRoleId, GETDATE());
+IF NOT EXISTS (SELECT 1 FROM user_roles WHERE user_id = (SELECT id FROM users WHERE employee_id = 'EMP007') AND role_id = @ClusterRoleId)
+    INSERT INTO user_roles (user_id, role_id, created_at) VALUES ((SELECT id FROM users WHERE employee_id = 'EMP007'), @ClusterRoleId, GETDATE());
+IF NOT EXISTS (SELECT 1 FROM user_roles WHERE user_id = (SELECT id FROM users WHERE employee_id = 'EMP003') AND role_id = @CircleRoleId)
+    INSERT INTO user_roles (user_id, role_id, created_at) VALUES ((SELECT id FROM users WHERE employee_id = 'EMP003'), @CircleRoleId, GETDATE());
+IF NOT EXISTS (SELECT 1 FROM user_roles WHERE user_id = (SELECT id FROM users WHERE employee_id = 'EMP002') AND role_id = @ZoneRoleId)
+    INSERT INTO user_roles (user_id, role_id, created_at) VALUES ((SELECT id FROM users WHERE employee_id = 'EMP002'), @ZoneRoleId, GETDATE());
+IF NOT EXISTS (SELECT 1 FROM user_roles WHERE user_id = (SELECT id FROM users WHERE employee_id = 'EMP001') AND role_id = @AreaRoleId)
+    INSERT INTO user_roles (user_id, role_id, created_at) VALUES ((SELECT id FROM users WHERE employee_id = 'EMP001'), @AreaRoleId, GETDATE());
+IF NOT EXISTS (SELECT 1 FROM user_roles WHERE user_id = (SELECT id FROM users WHERE employee_id = 'EMP006') AND role_id = @StoreRoleId)
+    INSERT INTO user_roles (user_id, role_id, created_at) VALUES ((SELECT id FROM users WHERE employee_id = 'EMP006'), @StoreRoleId, GETDATE());
+IF NOT EXISTS (SELECT 1 FROM user_roles WHERE user_id = (SELECT id FROM users WHERE employee_id = 'EMP005') AND role_id = @AgentRoleId)
+    INSERT INTO user_roles (user_id, role_id, created_at) VALUES ((SELECT id FROM users WHERE employee_id = 'EMP005'), @AgentRoleId, GETDATE());
+
 -- Verify users were created
 SELECT employee_id, username, full_name, user_type, role, active 
 FROM users 
-WHERE employee_id IN ('EMP001', 'EMP002', 'EMP003', 'EMP004', 'EMP005', 'EMP006')
+WHERE employee_id IN ('EMP001', 'EMP002', 'EMP003', 'EMP004', 'EMP005', 'EMP006', 'EMP007')
 ORDER BY employee_id;
 
 PRINT 'Users inserted! Remember to replace HASH_PLACEHOLDER values with actual BCrypt hashes.';
