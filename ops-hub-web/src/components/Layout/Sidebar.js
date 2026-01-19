@@ -100,6 +100,16 @@ export default function Sidebar() {
       ),
       permission: ['MANAGE_SETTINGS', 'MANAGE_USERS'],
     },
+    {
+      label: 'Audit Trail',
+      href: '/audit-logs',
+      icon: (
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0h6m-6 0V9a2 2 0 012-2h2a2 2 0 012 2v8m4-8h.01M17 12h.01M7 12h.01" />
+        </svg>
+      ),
+      permission: 'VIEW_AUDIT_LOGS',
+    },
   ];
 
   const isActive = (href) => {

@@ -41,6 +41,7 @@ public class PaymentService {
     private final PaymentGatewayService gatewayService;
     private final AuditLogService auditLogService;
     private final EmailNotificationService emailNotificationService;
+    private final NotificationService notificationService;
     private final ObjectMapper objectMapper;
 
     /**
@@ -101,6 +102,9 @@ public class PaymentService {
         payment.setPaymentStatus("INITIATED");
         
         Payment savedPayment = paymentRepository.save(payment);
+
+        // Update customer status lifecycle
+        updateCustomerStatus(customer, "PAYMENT_PENDING");
         
         // Initiate gateway payment (for UPI)
         if ("UPI".equalsIgnoreCase(dto.getPaymentMethod())) {
@@ -140,6 +144,8 @@ public class PaymentService {
                 customer.setPendingAmount(java.math.BigDecimal.ZERO);
             }
             customerRepository.save(customer);
+
+            updateCustomerStatusFromPayment(customer);
         }
         
         // Log audit
@@ -168,6 +174,18 @@ public class PaymentService {
                 auditLogService.logAction("PAYMENT_COMPLETED", "PAYMENT", paymentId,
                         null, completionValues, httpRequest);
             }
+        }
+
+        if ("SUCCESS".equalsIgnoreCase(savedPayment.getPaymentStatus())) {
+            notificationService.notifyUser(
+                    currentUser,
+                    "PAYMENT",
+                    "Payment completed",
+                    String.format("Payment %s completed for customer %s.", paymentReference, customer.getCustomerCode()),
+                    "PAYMENT",
+                    savedPayment.getId(),
+                    "INFO"
+            );
         }
         
         log.info("Payment {} initiated for customer {} by user {}", 
@@ -264,6 +282,8 @@ public class PaymentService {
             completionValues.put("transactionId", savedPayment.getTransactionId());
             auditLogService.logAction("PAYMENT_COMPLETED", "PAYMENT", paymentId,
                     null, completionValues, httpRequest);
+
+            updateCustomerStatusFromPayment(paymentCustomer);
         }
         
         // Send email notification for successful payment
@@ -284,6 +304,24 @@ public class PaymentService {
                 );
             } catch (Exception e) {
                 log.error("Error sending payment success email notification", e);
+            }
+
+            try {
+                User user = savedPayment.getUser();
+                if (user != null) {
+                    notificationService.notifyUser(
+                            user,
+                            "PAYMENT",
+                            "Payment completed",
+                            String.format("Payment %s completed for customer %s.", savedPayment.getPaymentReference(),
+                                    savedPayment.getCustomer() != null ? savedPayment.getCustomer().getCustomerCode() : ""),
+                            "PAYMENT",
+                            savedPayment.getId(),
+                            "INFO"
+                    );
+                }
+            } catch (Exception e) {
+                log.error("Error sending in-app payment notification", e);
             }
         }
         
@@ -472,5 +510,26 @@ public class PaymentService {
             address.append(customer.getPostalCode());
         }
         return address.toString();
+    }
+
+    private void updateCustomerStatus(Customer customer, String status) {
+        if (customer == null || status == null || status.isBlank()) {
+            return;
+        }
+        customer.setStatus(status);
+        customerRepository.save(customer);
+    }
+
+    private void updateCustomerStatusFromPayment(Customer customer) {
+        if (customer == null) {
+            return;
+        }
+        if (customer.getPendingAmount() != null
+                && customer.getPendingAmount().compareTo(java.math.BigDecimal.ZERO) == 0) {
+            customer.setStatus("PAID");
+        } else {
+            customer.setStatus("PAYMENT_PENDING");
+        }
+        customerRepository.save(customer);
     }
 }

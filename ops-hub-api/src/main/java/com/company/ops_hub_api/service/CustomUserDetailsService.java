@@ -4,6 +4,7 @@ import com.company.ops_hub_api.domain.Permission;
 import com.company.ops_hub_api.domain.Role;
 import com.company.ops_hub_api.domain.User;
 import com.company.ops_hub_api.repository.PermissionRepository;
+import com.company.ops_hub_api.repository.RoleRepository;
 import com.company.ops_hub_api.repository.UserRepository;
 import com.company.ops_hub_api.repository.UserRoleRepository;
 import com.company.ops_hub_api.security.UserPrincipal;
@@ -27,6 +28,7 @@ public class CustomUserDetailsService implements UserDetailsService {
     private final UserRepository userRepository;
     private final UserRoleRepository userRoleRepository;
     private final PermissionRepository permissionRepository;
+    private final RoleRepository roleRepository;
 
     @Override
     @Transactional(readOnly = true)
@@ -51,6 +53,18 @@ public class CustomUserDetailsService implements UserDetailsService {
     private UserPrincipal buildUserPrincipal(User user) {
         // Get user roles
         List<Role> roles = userRoleRepository.findRolesByUserId(user.getId());
+        if (roles == null) {
+            roles = new java.util.ArrayList<>();
+        }
+        if (roles.isEmpty()) {
+            String roleCode = user.getRole();
+            if (roleCode == null || roleCode.isBlank()) {
+                roleCode = HierarchyUtil.normalizeUserType(user);
+            }
+            if (roleCode != null && !roleCode.isBlank()) {
+                roleRepository.findByCode(roleCode).ifPresent(roles::add);
+            }
+        }
         Set<String> roleCodes = roles.stream()
                 .map(Role::getCode)
                 .collect(Collectors.toSet());

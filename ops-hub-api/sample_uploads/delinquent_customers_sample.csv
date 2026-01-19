@@ -1,0 +1,5 @@
+customer_name,phone,email,pending_amount,cluster,circle,zone,area,store
+Rohan Sharma,9876543210,rohan.sharma@example.com,12000.50,NORTH,UTTAR_PRADESH,NOIDA,SECTOR_63,
+Anita Verma,9876543211,anita.verma@example.com,8450.00,NORTH,UTTAR_PRADESH,GHAZIABAD,INDIRAPURAM,Store A
+Mohit Singh,9876543212,mohit.singh@example.com,15200.75,NORTH,DELHI,CENTRAL_DELHI,SECTOR_18,Store B
+Priya Iyer,9876543213,priya.iyer@example.com,5600.00,SOUTH,TAMIL_NADU,CHENNAI,T_NAGAR,Store C

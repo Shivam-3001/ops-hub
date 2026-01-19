@@ -60,14 +60,14 @@ export default function AiFloatingWidget() {
       <button
         type="button"
         onClick={() => setOpen((prev) => !prev)}
-        className="fixed bottom-6 right-6 z-40 rounded-full bg-slate-900 text-white w-12 h-12 shadow-lg hover:bg-slate-800"
+        className="fixed bottom-6 right-6 z-50 rounded-full bg-slate-900 text-white w-12 h-12 shadow-lg hover:bg-slate-800"
         aria-label="AI Assistant"
       >
         🤖
       </button>
 
       {open && (
-        <div className="fixed bottom-20 right-6 z-40 w-80 h-96 bg-white border border-slate-200 rounded-xl shadow-xl flex flex-col">
+        <div className="fixed bottom-20 right-6 z-50 w-80 h-96 bg-white border border-slate-200 rounded-xl shadow-xl flex flex-col">
           <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between">
             <div className="text-sm font-semibold text-slate-900">AI Assistant</div>
             <button

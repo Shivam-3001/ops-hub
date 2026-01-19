@@ -22,4 +22,18 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
     List<Payment> findByUserId(@Param("userId") Long userId);
     
     List<Payment> findByPaymentStatus(String paymentStatus);
+
+    List<Payment> findByPaymentStatusAndCreatedAtBefore(String paymentStatus, java.time.LocalDateTime cutoff);
+
+    @Query("SELECT COUNT(p) FROM Payment p WHERE p.paymentStatus = :status")
+    long countByPaymentStatusValue(@Param("status") String status);
+
+    @Query("SELECT COUNT(p) FROM Payment p WHERE p.paymentStatus = :status AND p.customer.id IN :customerIds")
+    long countByPaymentStatusValueAndCustomerIds(@Param("status") String status, @Param("customerIds") List<Long> customerIds);
+
+    @Query("SELECT COALESCE(SUM(p.amount), 0) FROM Payment p WHERE p.paymentStatus = :status")
+    java.math.BigDecimal sumAmountByStatus(@Param("status") String status);
+
+    @Query("SELECT COALESCE(SUM(p.amount), 0) FROM Payment p WHERE p.paymentStatus = :status AND p.customer.id IN :customerIds")
+    java.math.BigDecimal sumAmountByStatusAndCustomerIds(@Param("status") String status, @Param("customerIds") List<Long> customerIds);
 }

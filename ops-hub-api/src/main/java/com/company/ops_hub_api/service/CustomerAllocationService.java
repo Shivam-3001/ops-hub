@@ -36,6 +36,7 @@ public class CustomerAllocationService {
     private final UserRoleRepository userRoleRepository;
     private final AuditLogService auditLogService;
     private final EmailNotificationService emailNotificationService;
+    private final NotificationService notificationService;
 
     /**
      * Allocate a customer to a user
@@ -91,6 +92,9 @@ public class CustomerAllocationService {
         allocation.setNotes(dto.getNotes());
         
         CustomerAllocation savedAllocation = allocationRepository.save(allocation);
+
+        // Update customer status lifecycle
+        updateCustomerStatus(customer, "ASSIGNED");
         
         // Log audit
         Map<String, Object> newValues = new HashMap<>();
@@ -108,6 +112,17 @@ public class CustomerAllocationService {
             auditLogService.logAction("CREATE", "CUSTOMER_ALLOCATION", allocationId, 
                     null, newValues, httpRequest);
         }
+
+        // In-app notification
+        notificationService.notifyUser(
+                assignee,
+                "ASSIGNMENT",
+                "New customer assigned",
+                String.format("Customer %s assigned to you.", customer.getCustomerCode()),
+                "CUSTOMER",
+                customer.getId(),
+                "INFO"
+        );
         
         // Send email notification
         try {
@@ -201,6 +216,9 @@ public class CustomerAllocationService {
         newAllocation.setNotes(dto.getNotes());
         
         CustomerAllocation savedAllocation = allocationRepository.save(newAllocation);
+
+        // Update customer status lifecycle
+        updateCustomerStatus(customer, "ASSIGNED");
         
         // Log audit
         Map<String, Object> newValues = new HashMap<>();
@@ -220,6 +238,17 @@ public class CustomerAllocationService {
             auditLogService.logAction("REASSIGN", "CUSTOMER_ALLOCATION", allocationId, 
                     oldValues, newValues, httpRequest);
         }
+
+        // In-app notification
+        notificationService.notifyUser(
+                newAssignee,
+                "ASSIGNMENT",
+                "Customer reassigned",
+                String.format("Customer %s reassigned to you.", customer.getCustomerCode()),
+                "CUSTOMER",
+                customer.getId(),
+                "INFO"
+        );
         
         log.info("Customer {} reassigned from {} users to user {} by {}", 
                 customer.getCustomerCode(), activeAllocations.size(), 
@@ -271,9 +300,26 @@ public class CustomerAllocationService {
             auditLogService.logAction("DEALLOCATE", "CUSTOMER_ALLOCATION", allocationId, 
                     oldValues, newValues, httpRequest);
         }
+
+        // Close customer if fully paid and no active allocations
+        if (customer.getPendingAmount() != null
+                && customer.getPendingAmount().compareTo(java.math.BigDecimal.ZERO) == 0) {
+            long activeAllocations = allocationRepository.countActiveByCustomerId(customer.getId());
+            if (activeAllocations == 0 && "PAID".equalsIgnoreCase(customer.getStatus())) {
+                updateCustomerStatus(customer, "CLOSED");
+            }
+        }
         
         log.info("Customer {} deallocated from user {} by {}", 
                 customer.getCustomerCode(), userId, getCurrentUser().getEmployeeId());
+    }
+
+    private void updateCustomerStatus(Customer customer, String status) {
+        if (customer == null || status == null || status.isBlank()) {
+            return;
+        }
+        customer.setStatus(status);
+        customerRepository.save(customer);
     }
 
     /**

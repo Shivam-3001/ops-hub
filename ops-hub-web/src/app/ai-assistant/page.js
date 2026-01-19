@@ -40,6 +40,7 @@ export default function AiAssistantPage() {
       setContext(ctx);
     } catch (err) {
       console.error("Error loading AI context:", err);
+      setError(err.message || "Failed to load AI context");
     }
   };
 
@@ -49,6 +50,7 @@ export default function AiAssistantPage() {
       setConversations(data || []);
     } catch (err) {
       console.error("Error loading conversations:", err);
+      setError(err.message || "Failed to load AI conversations");
     }
   };
 
@@ -145,6 +147,11 @@ export default function AiAssistantPage() {
   return (
     <AppLayout title="AI Assistant" subtitle="Get help with operations">
       <PermissionGuard permission="USE_AI_AGENT">
+        {error && (
+          <div className="mb-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
+            {error}
+          </div>
+        )}
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 h-[calc(100vh-200px)]">
           {/* Conversations Sidebar */}
           <div className="lg:col-span-1">

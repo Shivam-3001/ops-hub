@@ -73,7 +73,7 @@ public class Customer {
     private Area area;
 
     @Column(nullable = false, length = 50)
-    private String status = "ACTIVE"; // ACTIVE, INACTIVE, SUSPENDED
+    private String status = "NEW"; // NEW, ASSIGNED, VISITED, PAYMENT_PENDING, PAID, CLOSED
 
     @Column(length = 2000)
     private String notes;

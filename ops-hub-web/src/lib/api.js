@@ -183,11 +183,94 @@ class ApiClient {
     return this.request('/dashboard');
   }
 
+  // ==================== Notifications ====================
+
+  async getNotifications(limit = 10) {
+    return this.request(`/notifications?limit=${limit}`);
+  }
+
+  async markNotificationRead(notificationId) {
+    return this.request(`/notifications/${notificationId}/read`, {
+      method: 'POST',
+    });
+  }
+
+  async markAllNotificationsRead() {
+    return this.request('/notifications/read-all', {
+      method: 'POST',
+    });
+  }
+
   // ==================== Customers ====================
 
   async getCustomers(filters = {}) {
     const queryParams = new URLSearchParams(filters).toString();
     return this.request(`/customers${queryParams ? `?${queryParams}` : ''}`);
+  }
+
+  async previewCustomerUpload(file) {
+    const token = this.getToken();
+    const formData = new FormData();
+    formData.append('file', file);
+    const response = await fetch(`${this.baseUrl}/customer-uploads/preview`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: 'application/json',
+      },
+      body: formData,
+    });
+    if (!response.ok) {
+      const message = await response.text();
+      throw new Error(message || 'Failed to preview upload');
+    }
+    const text = await response.text();
+    return this.safeJsonParse(text, 'Failed to preview upload');
+  }
+
+  async uploadCustomers(file) {
+    const token = this.getToken();
+    const formData = new FormData();
+    formData.append('file', file);
+    const response = await fetch(`${this.baseUrl}/customer-uploads`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: 'application/json',
+      },
+      body: formData,
+    });
+    if (!response.ok) {
+      const message = await response.text();
+      throw new Error(message || 'Failed to upload customers');
+    }
+    const text = await response.text();
+    return this.safeJsonParse(text, 'Failed to upload customers');
+  }
+
+  async getCustomerUploadHistory() {
+    return this.request('/customer-uploads/history');
+  }
+
+  safeJsonParse(text, fallbackMessage) {
+    if (!text) {
+      throw new Error(fallbackMessage || 'Invalid server response');
+    }
+    const trimmed = text.trim();
+    try {
+      return JSON.parse(trimmed);
+    } catch (error) {
+      const firstBrace = trimmed.indexOf('{');
+      const lastBrace = trimmed.lastIndexOf('}');
+      if (firstBrace >= 0 && lastBrace > firstBrace) {
+        try {
+          return JSON.parse(trimmed.slice(firstBrace, lastBrace + 1));
+        } catch (innerError) {
+          throw new Error(trimmed);
+        }
+      }
+      throw new Error(trimmed);
+    }
   }
 
   async getCustomer(customerId) {
@@ -438,6 +521,13 @@ class ApiClient {
 
   async getAreas(zoneId) {
     return this.request(`/filters/areas?zoneId=${zoneId}`);
+  }
+
+  // ==================== Audit Logs ====================
+
+  async getAuditLogs(params = {}) {
+    const queryParams = new URLSearchParams(params).toString();
+    return this.request(`/audit-logs${queryParams ? `?${queryParams}` : ''}`);
   }
 }
 

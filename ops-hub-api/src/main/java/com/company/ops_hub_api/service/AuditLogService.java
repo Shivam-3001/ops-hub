@@ -7,6 +7,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import com.company.ops_hub_api.dto.AuditLogDTO;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
@@ -79,6 +82,14 @@ public class AuditLogService {
         }
     }
 
+    @Transactional(readOnly = true)
+    public Page<AuditLogDTO> searchAuditLogs(String actionType, String entityType, Long userId,
+                                             LocalDateTime startTime, LocalDateTime endTime,
+                                             Pageable pageable) {
+        return auditLogRepository.searchAuditLogs(actionType, entityType, userId, startTime, endTime, pageable)
+                .map(this::toDTO);
+    }
+
     private void setActor(AuditLog auditLog, Long actorUserId) {
         if (actorUserId != null) {
             userRepository.findById(actorUserId).ifPresent(auditLog::setUser);
@@ -115,6 +126,36 @@ public class AuditLogService {
             auditLog.setRequestUrl(request.getRequestURI());
             auditLog.setRequestMethod(request.getMethod());
         }
+    }
+
+    private AuditLogDTO toDTO(AuditLog auditLog) {
+        String userName = null;
+        String employeeId = null;
+        Long userId = null;
+        if (auditLog.getUser() != null) {
+            userId = auditLog.getUser().getId();
+            employeeId = auditLog.getUser().getEmployeeId();
+            userName = auditLog.getUser().getFullName() != null
+                    ? auditLog.getUser().getFullName()
+                    : auditLog.getUser().getUsername();
+        }
+        return AuditLogDTO.builder()
+                .id(auditLog.getId())
+                .userId(userId)
+                .employeeId(employeeId)
+                .userName(userName)
+                .actionType(auditLog.getActionType())
+                .entityType(auditLog.getEntityType())
+                .entityId(auditLog.getEntityId())
+                .oldValues(auditLog.getOldValues())
+                .newValues(auditLog.getNewValues())
+                .ipAddress(auditLog.getIpAddress())
+                .requestUrl(auditLog.getRequestUrl())
+                .requestMethod(auditLog.getRequestMethod())
+                .status(auditLog.getStatus())
+                .errorMessage(auditLog.getErrorMessage())
+                .createdAt(auditLog.getCreatedAt())
+                .build();
     }
 
     private String getClientIpAddress(HttpServletRequest request) {

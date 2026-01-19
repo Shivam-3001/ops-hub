@@ -8,6 +8,7 @@ import org.springframework.stereotype.Repository;
 
 import java.util.List;
 import java.util.Optional;
+import java.math.BigDecimal;
 
 @Repository
 public interface CustomerRepository extends JpaRepository<Customer, Long> {
@@ -27,4 +28,19 @@ public interface CustomerRepository extends JpaRepository<Customer, Long> {
     List<Customer> findByAreaZoneCircleClusterId(Long clusterId);
     
     List<Customer> findByStatus(String status);
+
+    @Query("SELECT COALESCE(SUM(c.pendingAmount), 0) FROM Customer c")
+    BigDecimal sumPendingAmountAll();
+
+    @Query("SELECT COALESCE(SUM(c.pendingAmount), 0) FROM Customer c WHERE c.id IN :customerIds")
+    BigDecimal sumPendingAmountByIds(@Param("customerIds") List<Long> customerIds);
+
+    @Query("SELECT COUNT(c) FROM Customer c WHERE c.status = :status")
+    long countByStatusValue(@Param("status") String status);
+
+    @Query("SELECT COUNT(c) FROM Customer c WHERE c.status = :status AND c.id IN :customerIds")
+    long countByStatusValueAndIds(@Param("status") String status, @Param("customerIds") List<Long> customerIds);
+
+    boolean existsByPhoneEncrypted(String phoneEncrypted);
+    boolean existsByEmailEncrypted(String emailEncrypted);
 }

@@ -32,4 +32,14 @@ public interface CustomerVisitRepository extends JpaRepository<CustomerVisit, Lo
             @Param("visitDate") LocalDate visitDate);
     
     List<CustomerVisit> findByVisitStatus(String visitStatus);
+
+    long countByUserId(Long userId);
+
+    @Query("SELECT COUNT(v) FROM CustomerVisit v WHERE v.customer.id IN :customerIds")
+    long countByCustomerIds(@Param("customerIds") List<Long> customerIds);
+
+    @Query("SELECT COUNT(v) FROM CustomerVisit v WHERE v.user.id = :userId AND v.visitDate BETWEEN :start AND :end")
+    long countByUserIdAndVisitDateBetween(@Param("userId") Long userId,
+                                          @Param("start") java.time.LocalDateTime start,
+                                          @Param("end") java.time.LocalDateTime end);
 }

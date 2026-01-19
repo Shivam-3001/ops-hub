@@ -104,6 +104,9 @@ public class CustomerVisitService {
 
         CustomerVisit savedVisit = visitRepository.save(visit);
 
+        // Update customer status lifecycle
+        updateCustomerStatus(customer, "VISITED");
+
         // Log audit
         Map<String, Object> newValues = new HashMap<>();
         newValues.put("visitId", savedVisit.getId());
@@ -221,6 +224,14 @@ public class CustomerVisitService {
         allocationRepository.findActiveAllocationByCustomerAndUser(customerId, userId)
                 .orElseThrow(() -> new AccessDeniedException(
                         "Customer is not allocated to you. You cannot submit visits for this customer."));
+    }
+
+    private void updateCustomerStatus(Customer customer, String status) {
+        if (customer == null || status == null || status.isBlank()) {
+            return;
+        }
+        customer.setStatus(status);
+        customerRepository.save(customer);
     }
 
     private User getCurrentUser() {

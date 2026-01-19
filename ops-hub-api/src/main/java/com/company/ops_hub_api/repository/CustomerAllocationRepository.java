@@ -26,4 +26,13 @@ public interface CustomerAllocationRepository extends JpaRepository<CustomerAllo
     List<CustomerAllocation> findByCustomerId(Long customerId);
     List<CustomerAllocation> findByUserId(Long userId);
     List<CustomerAllocation> findByStatus(String status);
+
+    @Query("SELECT COUNT(a) FROM CustomerAllocation a WHERE a.user.id = :userId AND a.status = 'ACTIVE'")
+    long countActiveByUserId(@Param("userId") Long userId);
+
+    @Query("SELECT COUNT(a) FROM CustomerAllocation a WHERE a.status = 'ACTIVE' AND a.customer.id IN :customerIds")
+    long countActiveByCustomerIds(@Param("customerIds") List<Long> customerIds);
+
+    @Query("SELECT COUNT(a) FROM CustomerAllocation a WHERE a.status = 'ACTIVE' AND a.customer.id = :customerId")
+    long countActiveByCustomerId(@Param("customerId") Long customerId);
 }

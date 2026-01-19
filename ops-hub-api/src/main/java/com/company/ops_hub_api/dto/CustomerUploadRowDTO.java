@@ -22,6 +22,7 @@ public class CustomerUploadRowDTO {
     private String circle;
     private String zone;
     private String area;
+    private String store;
     private boolean valid;
     private List<String> errors;
 }
