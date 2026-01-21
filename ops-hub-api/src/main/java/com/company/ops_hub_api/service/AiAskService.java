@@ -67,7 +67,8 @@ public class AiAskService {
             String prompt = promptBuilder.buildPrompt(user, request.getQuestion(), intent, businessSummary, recentMessages);
             responseText = ollamaClient.generate(prompt);
             if (responseText == null || responseText.trim().isEmpty()) {
-                responseText = "I'm unable to generate a response right now. Please try again.";
+                log.warn("Ollama response empty; returning authorized summary fallback.");
+                responseText = businessSummary + " (AI engine unavailable; showing authorized summary.)";
             }
         }
 

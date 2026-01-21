@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -38,9 +39,9 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="flex min-h-screen">
+    <div className="flex min-h-screen bg-white dark:bg-slate-950">
       {/* Left Section - Branding */}
-      <div className="hidden lg:flex lg:w-2/3 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 relative overflow-hidden">
+      <div className="hidden lg:flex lg:w-2/3 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 relative overflow-hidden">
         {/* Animated Background Elements */}
         <div className="absolute inset-0 opacity-10">
           <div className="absolute top-20 left-20 w-72 h-72 bg-blue-500 rounded-full mix-blend-multiply filter blur-3xl animate-blob"></div>
@@ -116,7 +117,7 @@ export default function LoginPage() {
       </div>
 
       {/* Right Section - Login Form */}
-      <div className="flex-1 lg:w-1/3 flex items-center justify-center bg-gradient-to-br from-slate-50 to-white p-8">
+      <div className="flex-1 lg:w-1/3 flex items-center justify-center bg-gradient-to-br from-slate-50 to-white dark:from-slate-950 dark:to-slate-900 p-8">
         <div className="w-full max-w-md">
           {/* Mobile Logo */}
           <div className="lg:hidden flex items-center gap-3 mb-8">
@@ -129,10 +130,10 @@ export default function LoginPage() {
           </div>
 
           {/* Login Card */}
-          <div className="bg-white rounded-2xl shadow-xl border border-slate-200 p-8">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-800 p-8">
             <div className="mb-8">
-              <h2 className="text-3xl font-bold text-slate-900 mb-2">Welcome Back</h2>
-              <p className="text-slate-500">Sign in to continue to Ops Hub</p>
+              <h2 className="text-3xl font-bold text-slate-900 dark:text-slate-100 mb-2">Welcome Back</h2>
+              <p className="text-slate-500 dark:text-slate-400">Sign in to continue to Ops Hub</p>
             </div>
 
             <form onSubmit={handleLogin} className="space-y-6">
@@ -143,7 +144,7 @@ export default function LoginPage() {
               )}
 
               <div>
-                <label htmlFor="employeeId" className="block text-sm font-medium text-slate-700 mb-2">
+                <label htmlFor="employeeId" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
                   Employee ID
                 </label>
                 <input
@@ -152,13 +153,13 @@ export default function LoginPage() {
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
                   required
-                  className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-900 focus:border-transparent transition-all outline-none text-slate-900 placeholder-slate-400"
+                  className="w-full px-4 py-3 border border-slate-300 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-slate-900 focus:border-transparent transition-all outline-none text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:bg-slate-900"
                   placeholder="Enter your Employee ID (e.g., EMP001)"
                 />
               </div>
 
               <div>
-                <label htmlFor="password" className="block text-sm font-medium text-slate-700 mb-2">
+                <label htmlFor="password" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
                   Password
                 </label>
                 <input
@@ -167,7 +168,7 @@ export default function LoginPage() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
-                  className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-900 focus:border-transparent transition-all outline-none text-slate-900 placeholder-slate-400"
+                  className="w-full px-4 py-3 border border-slate-300 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-slate-900 focus:border-transparent transition-all outline-none text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:bg-slate-900"
                   placeholder="Enter your password"
                 />
               </div>
@@ -175,11 +176,14 @@ export default function LoginPage() {
               <div className="flex items-center justify-between">
                 <label className="flex items-center">
                   <input type="checkbox" className="w-4 h-4 text-slate-900 border-slate-300 rounded focus:ring-slate-900" />
-                  <span className="ml-2 text-sm text-slate-600">Remember me</span>
+                  <span className="ml-2 text-sm text-slate-600 dark:text-slate-400">Remember me</span>
                 </label>
-                <a href="#" className="text-sm font-medium text-slate-900 hover:text-slate-700 transition-colors">
+                <Link
+                  href="/forgot-password"
+                  className="text-sm font-medium text-slate-900 dark:text-slate-200 hover:text-slate-700 transition-colors"
+                >
                   Forgot password?
-                </a>
+                </Link>
               </div>
 
               <button
@@ -201,10 +205,10 @@ export default function LoginPage() {
               </button>
             </form>
 
-            <div className="mt-6 pt-6 border-t border-slate-200">
-              <p className="text-center text-sm text-slate-600">
+            <div className="mt-6 pt-6 border-t border-slate-200 dark:border-slate-800">
+              <p className="text-center text-sm text-slate-600 dark:text-slate-400">
                 Don't have an account?{" "}
-                <a href="#" className="font-medium text-slate-900 hover:text-slate-700 transition-colors">
+                <a href="#" className="font-medium text-slate-900 dark:text-slate-200 hover:text-slate-700 transition-colors">
                   Contact Administrator
                 </a>
               </p>

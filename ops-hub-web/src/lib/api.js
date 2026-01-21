@@ -151,6 +151,41 @@ class ApiClient {
     }
   }
 
+  async changePassword(data) {
+    return this.request('/account/change-password', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async lookupForgotPassword(username) {
+    return this.request('/auth/forgot-password/lookup', {
+      method: 'POST',
+      body: JSON.stringify({ username }),
+    });
+  }
+
+  async sendForgotPasswordOtp(data) {
+    return this.request('/auth/forgot-password/send-otp', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async verifyForgotPasswordOtp(data) {
+    return this.request('/auth/forgot-password/verify-otp', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async resetForgotPassword(data) {
+    return this.request('/auth/forgot-password/reset', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
   // ==================== Permissions ====================
 
   async getMyPermissions() {

@@ -10,24 +10,66 @@ public class AiIntentDetector {
             return AiIntent.UNKNOWN;
         }
         String normalized = question.trim().toLowerCase();
-        if (normalized.contains("pending payment")
-                || normalized.contains("pending amount")
-                || normalized.contains("payment pending")
-                || normalized.contains("unpaid")) {
+        if (containsAny(normalized,
+                "pending payment",
+                "pending payments",
+                "pending amount",
+                "payment pending",
+                "payments pending",
+                "payment due",
+                "payments due",
+                "overdue",
+                "over due",
+                "unpaid",
+                "payment status",
+                "collection",
+                "collections",
+                "receivable",
+                "receivables",
+                "payment summary",
+                "payment totals",
+                "outstanding")) {
             return AiIntent.PENDING_PAYMENTS_SUMMARY;
         }
-        if (normalized.contains("agent performance")
-                || normalized.contains("agent stats")
-                || normalized.contains("agent summary")
-                || normalized.contains("agent productivity")) {
+        if (containsAny(normalized,
+                "agent performance",
+                "agent stats",
+                "agent summary",
+                "agent productivity",
+                "agent efficiency",
+                "field agent",
+                "field agents",
+                "agent workload",
+                "agent allocations",
+                "agent visits",
+                "agent payments",
+                "agent metrics")) {
             return AiIntent.AGENT_PERFORMANCE;
         }
-        if (normalized.contains("visit summary")
-                || normalized.contains("visit stats")
-                || normalized.contains("visits")
-                || normalized.contains("visit performance")) {
+        if (containsAny(normalized,
+                "visit summary",
+                "visit stats",
+                "visit status",
+                "visit performance",
+                "visits",
+                "field visits",
+                "site visits",
+                "follow up",
+                "followup")) {
             return AiIntent.VISIT_SUMMARY;
         }
         return AiIntent.UNKNOWN;
+    }
+
+    private boolean containsAny(String text, String... keywords) {
+        if (text == null || text.isBlank()) {
+            return false;
+        }
+        for (String keyword : keywords) {
+            if (text.contains(keyword)) {
+                return true;
+            }
+        }
+        return false;
     }
 }

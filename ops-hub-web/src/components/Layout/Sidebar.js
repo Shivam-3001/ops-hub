@@ -5,9 +5,10 @@ import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
 import PermissionGuard from '@/components/PermissionGuard';
 
-export default function Sidebar() {
+export default function Sidebar({ collapsed = false, onToggle }) {
   const pathname = usePathname();
   const { user } = useAuth();
+  const isAdmin = user?.userType === 'ADMIN' || user?.role === 'ADMIN';
 
   const menuItems = [
     {
@@ -98,7 +99,6 @@ export default function Sidebar() {
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
         </svg>
       ),
-      permission: ['MANAGE_SETTINGS', 'MANAGE_USERS'],
     },
     {
       label: 'Audit Trail',
@@ -109,6 +109,16 @@ export default function Sidebar() {
         </svg>
       ),
       permission: 'VIEW_AUDIT_LOGS',
+    },
+    {
+      label: 'Document',
+      href: '/document',
+      icon: (
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m-6-8h6m2 10a2 2 0 01-2 2H7a2 2 0 01-2-2V6a2 2 0 012-2h5l5 5v9z" />
+        </svg>
+      ),
+      adminOnly: true,
     },
   ];
 
@@ -127,31 +137,55 @@ export default function Sidebar() {
   };
 
   return (
-    <aside className="fixed left-0 top-0 h-full w-64 bg-white border-r border-slate-200 flex flex-col z-30">
+    <aside
+      className={`fixed left-0 top-0 h-full bg-white border-r border-slate-200 flex flex-col z-30 transition-all duration-200 ${
+        collapsed ? 'w-20' : 'w-64'
+      }`}
+    >
       {/* Logo */}
-      <div className="h-16 flex items-center px-6 border-b border-slate-200">
-        <div className="w-10 h-10 bg-slate-900 rounded-lg flex items-center justify-center">
-          <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-          </svg>
+      <div className="h-16 flex items-center px-4 border-b border-slate-200">
+        <div className="flex items-center gap-3 overflow-hidden">
+          <div className="w-10 h-10 bg-slate-900 rounded-lg flex items-center justify-center">
+            <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+            </svg>
+          </div>
+          {!collapsed && <span className="text-xl font-bold text-slate-900">Ops Hub</span>}
         </div>
-        <span className="ml-3 text-xl font-bold text-slate-900">Ops Hub</span>
+        <button
+          type="button"
+          onClick={onToggle}
+          aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          className="ml-auto p-2 rounded-lg hover:bg-slate-100 transition-colors"
+        >
+          <svg
+            className={`w-5 h-5 text-slate-600 transition-transform ${collapsed ? 'rotate-180' : ''}`}
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+          </svg>
+        </button>
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto">
+      <nav className={`flex-1 py-6 space-y-2 overflow-y-auto ${collapsed ? 'px-2' : 'px-4'}`}>
         {menuItems.map((item) => {
+          if (item.adminOnly && !isAdmin) {
+            return null;
+          }
           const content = (
             <Link
               href={item.href}
-              className={`flex items-center px-4 py-3 rounded-lg transition-colors ${
+              className={`flex items-center rounded-lg transition-colors ${
                 isActive(item.href)
                   ? 'text-slate-900 bg-slate-100 font-medium'
                   : 'text-slate-600 hover:bg-slate-50'
-              }`}
+              } ${collapsed ? 'justify-center px-2 py-3' : 'px-4 py-3'}`}
             >
               {item.icon}
-              <span className="ml-3">{item.label}</span>
+              {!collapsed && <span className="ml-3">{item.label}</span>}
             </Link>
           );
 
@@ -171,21 +205,25 @@ export default function Sidebar() {
       <div className="p-4 border-t border-slate-200">
         <Link
           href="/profile"
-          className="flex items-center px-4 py-3 hover:bg-slate-50 rounded-lg transition-colors cursor-pointer"
+          className={`flex items-center hover:bg-slate-50 rounded-lg transition-colors cursor-pointer ${
+            collapsed ? 'justify-center px-2 py-3' : 'px-4 py-3'
+          }`}
         >
           <div className="w-10 h-10 bg-slate-900 rounded-full flex items-center justify-center">
             <span className="text-white text-sm font-medium">
               {getInitials(user?.fullName || user?.username || 'User')}
             </span>
           </div>
-          <div className="ml-3 flex-1 min-w-0">
-            <p className="text-sm font-medium text-slate-900 truncate">
-              {user?.fullName || user?.username || 'User'}
-            </p>
-            <p className="text-xs text-slate-500 truncate">
-              {user?.role || user?.userType || 'User'}
-            </p>
-          </div>
+          {!collapsed && (
+            <div className="ml-3 flex-1 min-w-0">
+              <p className="text-sm font-medium text-slate-900 truncate">
+                {user?.fullName || user?.username || 'User'}
+              </p>
+              <p className="text-xs text-slate-500 truncate">
+                {user?.role || user?.userType || 'User'}
+              </p>
+            </div>
+          )}
         </Link>
       </div>
     </aside>

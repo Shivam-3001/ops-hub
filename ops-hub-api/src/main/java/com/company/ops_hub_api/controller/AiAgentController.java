@@ -1,7 +1,5 @@
 package com.company.ops_hub_api.controller;
 
-import com.company.ops_hub_api.domain.AiAction;
-import com.company.ops_hub_api.domain.AiConversation;
 import com.company.ops_hub_api.dto.*;
 import com.company.ops_hub_api.security.RequiresPermission;
 import com.company.ops_hub_api.service.AiAgentService;
@@ -81,8 +79,8 @@ public class AiAgentController {
      */
     @RequiresPermission("USE_AI_AGENT")
     @GetMapping("/conversations")
-    public ResponseEntity<List<AiConversation>> getConversations() {
-        List<AiConversation> conversations = aiAgentService.getUserConversations();
+    public ResponseEntity<List<AiConversationSummaryDTO>> getConversations() {
+        List<AiConversationSummaryDTO> conversations = aiAgentService.getUserConversations();
         return ResponseEntity.ok(conversations);
     }
 
@@ -91,9 +89,9 @@ public class AiAgentController {
      */
     @RequiresPermission("USE_AI_AGENT")
     @GetMapping("/conversations/{conversationId}/actions")
-    public ResponseEntity<List<AiAction>> getConversationActions(
+    public ResponseEntity<List<AiActionDTO>> getConversationActions(
             @PathVariable String conversationId) {
-        List<AiAction> actions = aiAgentService.getConversationActions(conversationId);
+        List<AiActionDTO> actions = aiAgentService.getConversationActions(conversationId);
         return ResponseEntity.ok(actions);
     }
 }

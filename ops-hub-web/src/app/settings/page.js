@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState } from "react";
 import AppLayout from "@/components/Layout/AppLayout";
-import PermissionGuard from "@/components/PermissionGuard";
 import { useAuth } from "@/contexts/AuthContext";
 import api from "@/lib/api";
 
@@ -15,6 +14,14 @@ export default function SettingsPage() {
   const [showCreateUserModal, setShowCreateUserModal] = useState(false);
   const [createUserLoading, setCreateUserLoading] = useState(false);
   const [createUserError, setCreateUserError] = useState(null);
+  const [passwordForm, setPasswordForm] = useState({
+    currentPassword: "",
+    newPassword: "",
+    confirmPassword: "",
+  });
+  const [passwordError, setPasswordError] = useState(null);
+  const [passwordSuccess, setPasswordSuccess] = useState(null);
+  const [passwordLoading, setPasswordLoading] = useState(false);
   const [createUserForm, setCreateUserForm] = useState({
     fullName: "",
     username: "",
@@ -133,31 +140,74 @@ export default function SettingsPage() {
     return options;
   }, [user?.userType]);
 
+  const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z\d]).{8,}$/;
+
+  const handleChangePassword = async (event) => {
+    event.preventDefault();
+    setPasswordError(null);
+    setPasswordSuccess(null);
+
+    if (!passwordForm.currentPassword) {
+      setPasswordError("Please enter your current password.");
+      return;
+    }
+
+    if (!passwordRegex.test(passwordForm.newPassword)) {
+      setPasswordError(
+        "Password must be at least 8 characters and include uppercase, lowercase, number, and special character."
+      );
+      return;
+    }
+
+    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+      setPasswordError("New password and confirm password do not match.");
+      return;
+    }
+
+    try {
+      setPasswordLoading(true);
+      await api.changePassword({
+        currentPassword: passwordForm.currentPassword,
+        newPassword: passwordForm.newPassword,
+        confirmPassword: passwordForm.confirmPassword,
+      });
+      setPasswordSuccess("Password updated successfully.");
+      setPasswordForm({
+        currentPassword: "",
+        newPassword: "",
+        confirmPassword: "",
+      });
+    } catch (error) {
+      setPasswordError(error.message || "Failed to update password.");
+    } finally {
+      setPasswordLoading(false);
+    }
+  };
+
   return (
     <AppLayout title="Settings" subtitle="Manage your preferences">
-      <PermissionGuard permission={["MANAGE_SETTINGS", "MANAGE_USERS"]}>
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-          {/* Settings Sidebar */}
-          <div className="lg:col-span-1">
-            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
-              <nav className="space-y-2">
-                {tabs.map((tab) => (
-                  <button
-                    key={tab.id}
-                    onClick={() => setActiveTab(tab.id)}
-                    className={`w-full text-left px-4 py-3 rounded-lg transition-colors ${
-                      activeTab === tab.id
-                        ? "bg-slate-900 text-white"
-                        : "text-slate-600 hover:bg-slate-50"
-                    }`}
-                  >
-                    <span className="mr-2">{tab.icon}</span>
-                    {tab.label}
-                  </button>
-                ))}
-              </nav>
-            </div>
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+        {/* Settings Sidebar */}
+        <div className="lg:col-span-1">
+          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
+            <nav className="space-y-2">
+              {tabs.map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`w-full text-left px-4 py-3 rounded-lg transition-colors ${
+                    activeTab === tab.id
+                      ? "bg-slate-900 text-white"
+                      : "text-slate-600 hover:bg-slate-50"
+                  }`}
+                >
+                  <span className="mr-2">{tab.icon}</span>
+                  {tab.label}
+                </button>
+              ))}
+            </nav>
           </div>
+        </div>
 
           {/* Settings Content */}
           <div className="lg:col-span-3">
@@ -236,13 +286,27 @@ export default function SettingsPage() {
               {activeTab === "security" && (
                 <div>
                   <h2 className="text-xl font-bold text-slate-900 mb-6">Security Settings</h2>
-                  <div className="space-y-6">
+                  <form className="space-y-6" onSubmit={handleChangePassword}>
+                    {passwordError && (
+                      <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
+                        {passwordError}
+                      </div>
+                    )}
+                    {passwordSuccess && (
+                      <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg">
+                        {passwordSuccess}
+                      </div>
+                    )}
                     <div>
                       <label className="block text-sm font-medium text-slate-700 mb-2">
                         Current Password
                       </label>
                       <input
                         type="password"
+                        value={passwordForm.currentPassword}
+                        onChange={(e) =>
+                          setPasswordForm({ ...passwordForm, currentPassword: e.target.value })
+                        }
                         className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-900 focus:border-transparent outline-none"
                       />
                     </div>
@@ -252,8 +316,16 @@ export default function SettingsPage() {
                       </label>
                       <input
                         type="password"
+                        value={passwordForm.newPassword}
+                        onChange={(e) =>
+                          setPasswordForm({ ...passwordForm, newPassword: e.target.value })
+                        }
                         className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-900 focus:border-transparent outline-none"
                       />
+                      <p className="text-xs text-slate-500 mt-2">
+                        Minimum 8 characters, 1 lowercase, 1 uppercase, 1 number, 1 special
+                        character.
+                      </p>
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-slate-700 mb-2">
@@ -261,15 +333,23 @@ export default function SettingsPage() {
                       </label>
                       <input
                         type="password"
+                        value={passwordForm.confirmPassword}
+                        onChange={(e) =>
+                          setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })
+                        }
                         className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-900 focus:border-transparent outline-none"
                       />
                     </div>
                     <div className="pt-4">
-                      <button className="px-4 py-2 bg-slate-900 text-white rounded-lg hover:bg-slate-800 transition-colors">
-                        Update Password
+                      <button
+                        type="submit"
+                        disabled={passwordLoading}
+                        className="px-4 py-2 bg-slate-900 text-white rounded-lg hover:bg-slate-800 transition-colors disabled:opacity-70"
+                      >
+                        {passwordLoading ? "Updating..." : "Update Password"}
                       </button>
                     </div>
-                  </div>
+                  </form>
                 </div>
               )}
 
@@ -382,8 +462,7 @@ export default function SettingsPage() {
               )}
             </div>
           </div>
-        </div>
-      </PermissionGuard>
+      </div>
 
       {showCreateUserModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">

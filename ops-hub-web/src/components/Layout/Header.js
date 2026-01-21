@@ -11,6 +11,7 @@ export default function Header({ title, subtitle }) {
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [open, setOpen] = useState(false);
+  const [isDarkMode, setIsDarkMode] = useState(false);
 
   const handleLogout = async () => {
     await logout();
@@ -28,6 +29,25 @@ export default function Header({ title, subtitle }) {
 
   useEffect(() => {
     loadNotifications();
+  }, []);
+
+  useEffect(() => {
+    const storedTheme =
+      typeof window !== 'undefined'
+        ? window.localStorage.getItem('opsHubTheme')
+        : null;
+    const prefersDark =
+      typeof window !== 'undefined' &&
+      window.matchMedia &&
+      window.matchMedia('(prefers-color-scheme: dark)').matches;
+    const shouldUseDark = storedTheme
+      ? storedTheme === 'dark'
+      : prefersDark;
+
+    setIsDarkMode(shouldUseDark);
+    if (typeof document !== 'undefined') {
+      document.documentElement.classList.toggle('dark', shouldUseDark);
+    }
   }, []);
 
   const handleToggleNotifications = async () => {
@@ -56,6 +76,22 @@ export default function Header({ title, subtitle }) {
     }
   };
 
+  const handleToggleTheme = () => {
+    setIsDarkMode((prev) => {
+      const nextValue = !prev;
+      if (typeof document !== 'undefined') {
+        document.documentElement.classList.toggle('dark', nextValue);
+      }
+      if (typeof window !== 'undefined') {
+        window.localStorage.setItem(
+          'opsHubTheme',
+          nextValue ? 'dark' : 'light'
+        );
+      }
+      return nextValue;
+    });
+  };
+
   return (
     <header className="bg-white border-b border-slate-200 h-16 flex items-center justify-between px-8 sticky top-0 z-20 ml-64">
       <div>
@@ -63,6 +99,22 @@ export default function Header({ title, subtitle }) {
         {subtitle && <p className="text-sm text-slate-500">{subtitle}</p>}
       </div>
       <div className="flex items-center gap-4">
+        <button
+          type="button"
+          onClick={handleToggleTheme}
+          title={isDarkMode ? 'Switch to light mode' : 'Switch to dark mode'}
+          className="p-2 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+        >
+          {isDarkMode ? (
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m8-9h1M3 12H2m15.364-6.364l.707.707M6.343 17.657l-.707.707m0-12.728l.707.707m10.607 10.607l-.707.707M12 5a7 7 0 100 14 7 7 0 000-14z" />
+            </svg>
+          ) : (
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z" />
+            </svg>
+          )}
+        </button>
         <div className="relative">
           <button
             className="p-2 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors relative"

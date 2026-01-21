@@ -109,17 +109,20 @@ public class AiAgentService {
      * Get user's AI conversations
      */
     @Transactional(readOnly = true)
-    public List<AiConversation> getUserConversations() {
+    public List<AiConversationSummaryDTO> getUserConversations() {
         checkAiAgentPermission();
         UserPrincipal userPrincipal = getCurrentUserPrincipal();
-        return conversationRepository.findActiveConversationsByUserId(userPrincipal.getUserId());
+        return conversationRepository.findActiveConversationsByUserId(userPrincipal.getUserId())
+                .stream()
+                .map(this::toConversationSummary)
+                .toList();
     }
 
     /**
      * Get actions for a conversation
      */
     @Transactional(readOnly = true)
-    public List<AiAction> getConversationActions(String conversationId) {
+    public List<AiActionDTO> getConversationActions(String conversationId) {
         checkAiAgentPermission();
         UserPrincipal userPrincipal = getCurrentUserPrincipal();
         
@@ -131,7 +134,10 @@ public class AiAgentService {
             throw new AccessDeniedException("Access denied to this conversation");
         }
 
-        return actionRepository.findByConversationId(conversation.getId());
+        return actionRepository.findByConversationId(conversation.getId())
+                .stream()
+                .map(this::toActionSummary)
+                .toList();
     }
 
     // Private helper methods
@@ -152,6 +158,34 @@ public class AiAgentService {
             return (UserPrincipal) authentication.getPrincipal();
         }
         return null;
+    }
+
+    private AiConversationSummaryDTO toConversationSummary(AiConversation conversation) {
+        if (conversation == null) {
+            return null;
+        }
+        return AiConversationSummaryDTO.builder()
+                .id(conversation.getId())
+                .conversationId(conversation.getConversationId())
+                .title(conversation.getTitle())
+                .status(conversation.getStatus())
+                .modelName(conversation.getModelName())
+                .createdAt(conversation.getCreatedAt())
+                .updatedAt(conversation.getUpdatedAt())
+                .build();
+    }
+
+    private AiActionDTO toActionSummary(AiAction action) {
+        if (action == null) {
+            return null;
+        }
+        return AiActionDTO.builder()
+                .id(action.getId())
+                .actionType(action.getActionType())
+                .actionName(action.getActionName())
+                .executionStatus(action.getExecutionStatus())
+                .createdAt(action.getCreatedAt())
+                .build();
     }
 
 }
