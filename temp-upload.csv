@@ -1,0 +1,2 @@
+customer_name,phone,email,pending_amount,cluster,circle,zone,area
+Test Customer,9000000001,test.upload.1@example.com,12345.67,NORTH,UTTAR_PRADESH,NOIDA,SECTOR_63

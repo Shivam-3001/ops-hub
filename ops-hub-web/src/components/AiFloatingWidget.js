@@ -83,7 +83,7 @@ export default function AiFloatingWidget() {
           <div className="flex-1 overflow-y-auto p-3 space-y-3">
             {messages.length === 0 && (
               <div className="text-xs text-slate-500">
-                Ask about pending payments, agent performance, or visit summaries.
+                Ask about customers, allocations, payments, visits, uploads, or notifications.
               </div>
             )}
             {messages.map((message, idx) => (

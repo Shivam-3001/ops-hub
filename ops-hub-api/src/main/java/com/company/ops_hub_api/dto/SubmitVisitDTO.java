@@ -23,7 +23,6 @@ public class SubmitVisitDTO {
     @NotBlank(message = "Visit status is required")
     private String visitStatus; // SCHEDULED, IN_PROGRESS, COMPLETED, CANCELLED
     
-    @NotBlank(message = "Notes are required")
     private String notes;
     
     private String visitType; // SCHEDULED, UNSCHEDULED, FOLLOW_UP

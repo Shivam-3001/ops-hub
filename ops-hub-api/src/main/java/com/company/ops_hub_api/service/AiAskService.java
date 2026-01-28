@@ -7,6 +7,12 @@ import com.company.ops_hub_api.dto.AiAskRequestDTO;
 import com.company.ops_hub_api.dto.AiAskResponseDTO;
 import com.company.ops_hub_api.repository.AiActionRepository;
 import com.company.ops_hub_api.repository.AiConversationRepository;
+import com.company.ops_hub_api.repository.AppNotificationRepository;
+import com.company.ops_hub_api.repository.CustomerAllocationRepository;
+import com.company.ops_hub_api.repository.CustomerRepository;
+import com.company.ops_hub_api.repository.CustomerUploadRepository;
+import com.company.ops_hub_api.repository.CustomerVisitRepository;
+import com.company.ops_hub_api.repository.PaymentRepository;
 import com.company.ops_hub_api.repository.UserRepository;
 import com.company.ops_hub_api.security.UserPrincipal;
 import com.company.ops_hub_api.util.HierarchyUtil;
@@ -39,6 +45,12 @@ public class AiAskService {
     private final AiConversationRepository conversationRepository;
     private final AiActionRepository actionRepository;
     private final UserRepository userRepository;
+    private final CustomerRepository customerRepository;
+    private final CustomerAllocationRepository allocationRepository;
+    private final CustomerVisitRepository visitRepository;
+    private final PaymentRepository paymentRepository;
+    private final CustomerUploadRepository uploadRepository;
+    private final AppNotificationRepository notificationRepository;
     private final AuditLogService auditLogService;
     private final ObjectMapper objectMapper;
     private final EntityManager entityManager;
@@ -55,21 +67,17 @@ public class AiAskService {
         AiConversation conversation = getOrCreateConversation(request.getConversationId(), user, request.getQuestion());
         updateConversationContext(conversation, request);
 
-        AiIntent intent = intentDetector.detect(request.getQuestion());
+        AiIntent detectedIntent = intentDetector.detect(request.getQuestion());
+        AiIntent intent = detectedIntent == AiIntent.UNKNOWN ? AiIntent.GENERAL_SUMMARY : detectedIntent;
         String responseText;
 
-        if (intent == AiIntent.UNKNOWN) {
-            responseText = "I can help with pending payments, agent performance, or visit summaries. "
-                    + "Please rephrase your request.";
-        } else {
-            String businessSummary = resolveBusinessSummary(user, intent);
-            List<Map<String, String>> recentMessages = getRecentMessages(conversation.getId());
-            String prompt = promptBuilder.buildPrompt(user, request.getQuestion(), intent, businessSummary, recentMessages);
-            responseText = ollamaClient.generate(prompt);
-            if (responseText == null || responseText.trim().isEmpty()) {
-                log.warn("Ollama response empty; returning authorized summary fallback.");
-                responseText = businessSummary + " (AI engine unavailable; showing authorized summary.)";
-            }
+        String businessSummary = resolveBusinessSummary(user, intent);
+        List<Map<String, String>> recentMessages = getRecentMessages(conversation.getId());
+        String prompt = promptBuilder.buildPrompt(user, request.getQuestion(), intent, businessSummary, recentMessages);
+        responseText = ollamaClient.generate(prompt);
+        if (responseText == null || responseText.trim().isEmpty()) {
+            log.warn("Ollama response empty; returning authorized summary fallback.");
+            responseText = businessSummary + " (AI engine unavailable; showing authorized summary.)";
         }
 
         responseText = sanitizeAiResponse(responseText);
@@ -89,11 +97,43 @@ public class AiAskService {
 
     private String resolveBusinessSummary(User user, AiIntent intent) {
         return switch (intent) {
+            case GENERAL_SUMMARY -> buildGeneralSummary(user);
             case PENDING_PAYMENTS_SUMMARY -> buildPendingPaymentsSummary(user);
+            case PAYMENTS_SUMMARY -> buildPaymentsSummary(user);
+            case CUSTOMER_STATUS_SUMMARY -> buildCustomerStatusSummary(user);
+            case ALLOCATION_SUMMARY -> buildAllocationSummary(user);
             case VISIT_SUMMARY -> buildVisitSummary(user);
             case AGENT_PERFORMANCE -> buildAgentPerformanceSummary(user);
+            case NOTIFICATIONS_SUMMARY -> buildNotificationsSummary(user);
+            case UPLOADS_SUMMARY -> buildUploadsSummary(user);
             default -> "No authorized data available.";
         };
+    }
+
+    private String buildGeneralSummary(User user) {
+        Set<Long> accessibleCustomerIds = dataFilter.getAccessibleCustomerIds(user);
+        List<Long> customerIds = accessibleCustomerIds != null ? new ArrayList<>(accessibleCustomerIds) : List.of();
+        boolean hasScope = accessibleCustomerIds != null && !customerIds.isEmpty();
+
+        long customerCount = accessibleCustomerIds == null
+                ? customerRepository.count()
+                : customerIds.size();
+        long activeAllocations = accessibleCustomerIds == null
+                ? allocationRepository.findByStatus("ACTIVE").size()
+                : (hasScope ? allocationRepository.countActiveByCustomerIds(customerIds) : 0);
+        long pendingPayments = accessibleCustomerIds == null
+                ? paymentRepository.countByPaymentStatusValue("INITIATED")
+                : (hasScope ? paymentRepository.countByPaymentStatusValueAndCustomerIds("INITIATED", customerIds) : 0);
+        long successPayments = accessibleCustomerIds == null
+                ? paymentRepository.countByPaymentStatusValue("SUCCESS")
+                : (hasScope ? paymentRepository.countByPaymentStatusValueAndCustomerIds("SUCCESS", customerIds) : 0);
+        long visitsCount = accessibleCustomerIds == null
+                ? visitRepository.count()
+                : (hasScope ? visitRepository.countByCustomerIds(customerIds) : 0);
+
+        return String.format("Summary in scope: customers %d, active allocations %d, pending payments %d, " +
+                        "successful payments %d, total visits %d.",
+                customerCount, activeAllocations, pendingPayments, successPayments, visitsCount);
     }
 
     private String buildPendingPaymentsSummary(User user) {
@@ -107,6 +147,79 @@ public class AiAskService {
         long count = row[0] != null ? ((Number) row[0]).longValue() : 0L;
         BigDecimal amount = row[1] != null ? new BigDecimal(row[1].toString()) : BigDecimal.ZERO;
         return String.format("Pending payments in scope: %d; total amount: %s.", count, amount);
+    }
+
+    private String buildPaymentsSummary(User user) {
+        Set<Long> accessibleCustomerIds = dataFilter.getAccessibleCustomerIds(user);
+        List<Long> customerIds = accessibleCustomerIds != null ? new ArrayList<>(accessibleCustomerIds) : List.of();
+        boolean hasScope = accessibleCustomerIds != null && !customerIds.isEmpty();
+
+        long pending = accessibleCustomerIds == null
+                ? paymentRepository.countByPaymentStatusValue("INITIATED")
+                : (hasScope ? paymentRepository.countByPaymentStatusValueAndCustomerIds("INITIATED", customerIds) : 0);
+        long success = accessibleCustomerIds == null
+                ? paymentRepository.countByPaymentStatusValue("SUCCESS")
+                : (hasScope ? paymentRepository.countByPaymentStatusValueAndCustomerIds("SUCCESS", customerIds) : 0);
+        BigDecimal collected = accessibleCustomerIds == null
+                ? paymentRepository.sumAmountByStatus("SUCCESS")
+                : (hasScope ? paymentRepository.sumAmountByStatusAndCustomerIds("SUCCESS", customerIds) : BigDecimal.ZERO);
+        return String.format("Payments in scope: pending %d, successful %d, collected amount %s.",
+                pending, success, collected);
+    }
+
+    private String buildCustomerStatusSummary(User user) {
+        Set<Long> accessibleCustomerIds = dataFilter.getAccessibleCustomerIds(user);
+        List<Long> customerIds = accessibleCustomerIds != null ? new ArrayList<>(accessibleCustomerIds) : List.of();
+        boolean hasScope = accessibleCustomerIds != null && !customerIds.isEmpty();
+
+        String[] statuses = {"NEW", "ASSIGNED", "VISITED", "PAYMENT_PENDING", "PAID", "CLOSED"};
+        Map<String, Long> counts = new LinkedHashMap<>();
+        for (String status : statuses) {
+            long count = accessibleCustomerIds == null
+                    ? customerRepository.countByStatusValue(status)
+                    : (hasScope ? customerRepository.countByStatusValueAndIds(status, customerIds) : 0);
+            counts.put(status, count);
+        }
+        return "Customer status breakdown in scope: " + counts + ".";
+    }
+
+    private String buildAllocationSummary(User user) {
+        Set<Long> accessibleCustomerIds = dataFilter.getAccessibleCustomerIds(user);
+        List<Long> customerIds = accessibleCustomerIds != null ? new ArrayList<>(accessibleCustomerIds) : List.of();
+        boolean hasScope = accessibleCustomerIds != null && !customerIds.isEmpty();
+        long activeAllocations = accessibleCustomerIds == null
+                ? allocationRepository.findByStatus("ACTIVE").size()
+                : (hasScope ? allocationRepository.countActiveByCustomerIds(customerIds) : 0);
+        return String.format("Active allocations in scope: %d.", activeAllocations);
+    }
+
+    private String buildNotificationsSummary(User user) {
+        Long userId = user.getId();
+        if (userId == null) {
+            return "No notification data available.";
+        }
+        long unread = notificationRepository.countByUserIdAndReadAtIsNull(userId);
+        int recent = notificationRepository.findByUserIdSince(userId, LocalDateTime.now().minusDays(7)).size();
+        return String.format("Notifications: %d unread; %d received in last 7 days.", unread, recent);
+    }
+
+    private String buildUploadsSummary(User user) {
+        Long userId = user.getId();
+        if (userId == null) {
+            return "No upload data available.";
+        }
+        List<com.company.ops_hub_api.domain.CustomerUpload> uploads =
+                uploadRepository.findByUploadedByIdOrderByUploadedAtDesc(userId);
+        if (uploads.isEmpty()) {
+            return "No customer uploads found for your account.";
+        }
+        com.company.ops_hub_api.domain.CustomerUpload latest = uploads.get(0);
+        return String.format("Latest upload: %s (%s). Rows: %d total, %d success, %d failed.",
+                latest.getFileName(),
+                latest.getUploadStatus(),
+                latest.getTotalRows(),
+                latest.getSuccessfulRows(),
+                latest.getFailedRows());
     }
 
     private String buildVisitSummary(User user) {

@@ -4,11 +4,11 @@ import com.company.ops_hub_api.domain.Customer;
 import com.company.ops_hub_api.domain.CustomerAllocation;
 import com.company.ops_hub_api.domain.User;
 import com.company.ops_hub_api.dto.AllocateCustomerDTO;
+import com.company.ops_hub_api.dto.AssignableUserDTO;
 import com.company.ops_hub_api.dto.ReassignCustomerDTO;
 import com.company.ops_hub_api.repository.CustomerAllocationRepository;
 import com.company.ops_hub_api.repository.CustomerRepository;
 import com.company.ops_hub_api.repository.UserRepository;
-import com.company.ops_hub_api.repository.UserRoleRepository;
 import com.company.ops_hub_api.security.UserPrincipal;
 import com.company.ops_hub_api.util.HierarchyUtil;
 import jakarta.servlet.http.HttpServletRequest;
@@ -33,10 +33,10 @@ public class CustomerAllocationService {
     private final CustomerAllocationRepository allocationRepository;
     private final CustomerRepository customerRepository;
     private final UserRepository userRepository;
-    private final UserRoleRepository userRoleRepository;
     private final AuditLogService auditLogService;
     private final EmailNotificationService emailNotificationService;
     private final NotificationService notificationService;
+    private final ReportDataFilter reportDataFilter;
 
     /**
      * Allocate a customer to a user
@@ -344,7 +344,57 @@ public class CustomerAllocationService {
     @Transactional(readOnly = true)
     public List<CustomerAllocation> getAllActiveAllocations() {
         checkAllocationPermission();
-        return allocationRepository.findByStatus("ACTIVE");
+        User currentUser = getCurrentUser();
+        java.util.Set<Long> customerIds = reportDataFilter.getAccessibleCustomerIds(currentUser);
+        if (customerIds == null) {
+            return allocationRepository.findByStatus("ACTIVE");
+        }
+        if (customerIds.isEmpty()) {
+            return List.of();
+        }
+        return allocationRepository.findByStatusAndCustomerIdIn("ACTIVE", new java.util.ArrayList<>(customerIds));
+    }
+
+    /**
+     * Get users that the current allocator can assign to (next hierarchy level, within scope).
+     */
+    @Transactional(readOnly = true)
+    public List<AssignableUserDTO> getAssignableUsers() {
+        checkAllocationPermission();
+        User currentUser = getCurrentUser();
+        String allocatorType = HierarchyUtil.normalizeUserType(currentUser);
+
+        List<User> users;
+        if (HierarchyUtil.ADMIN.equals(allocatorType)) {
+            users = userRepository.findAll();
+        } else if (HierarchyUtil.CLUSTER_HEAD.equals(allocatorType)) {
+            Long clusterId = HierarchyUtil.getClusterId(currentUser);
+            users = clusterId == null
+                    ? List.of()
+                    : userRepository.findByAreaZoneCircleClusterIdAndUserType(clusterId, HierarchyUtil.CIRCLE_HEAD);
+        } else if (HierarchyUtil.CIRCLE_HEAD.equals(allocatorType)) {
+            Long circleId = HierarchyUtil.getCircleId(currentUser);
+            users = circleId == null
+                    ? List.of()
+                    : userRepository.findByAreaZoneCircleIdAndUserType(circleId, HierarchyUtil.ZONE_HEAD);
+        } else if (HierarchyUtil.ZONE_HEAD.equals(allocatorType)) {
+            Long zoneId = HierarchyUtil.getZoneId(currentUser);
+            users = zoneId == null
+                    ? List.of()
+                    : userRepository.findByAreaZoneIdAndUserType(zoneId, HierarchyUtil.AREA_HEAD);
+        } else if (HierarchyUtil.AREA_HEAD.equals(allocatorType) || HierarchyUtil.STORE_HEAD.equals(allocatorType)) {
+            Long areaId = HierarchyUtil.getAreaId(currentUser);
+            users = areaId == null
+                    ? List.of()
+                    : userRepository.findByAreaIdAndUserType(areaId, HierarchyUtil.AGENT);
+        } else {
+            users = List.of();
+        }
+
+        return users.stream()
+                .filter(user -> Boolean.TRUE.equals(user.getActive()))
+                .map(this::toAssignableUserDTO)
+                .toList();
     }
 
     private void checkAllocationPermission() {
@@ -361,6 +411,9 @@ public class CustomerAllocationService {
     private void validateUserRole(Long userId, String requiredRoleCode) {
         if (requiredRoleCode == null || requiredRoleCode.trim().isEmpty()) {
             return;
+        }
+        if (userId == null) {
+            throw new IllegalArgumentException("User ID cannot be null");
         }
         User assignee = userRepository.findById(userId)
                 .orElseThrow(() -> new IllegalArgumentException("User not found"));
@@ -453,5 +506,31 @@ public class CustomerAllocationService {
             name.append(customer.getLastName());
         }
         return name.length() > 0 ? name.toString() : customer.getCustomerCode();
+    }
+
+    private AssignableUserDTO toAssignableUserDTO(User user) {
+        if (user == null) {
+            return null;
+        }
+        return AssignableUserDTO.builder()
+                .id(user.getId())
+                .employeeId(user.getEmployeeId())
+                .username(user.getUsername())
+                .fullName(user.getFullName())
+                .userType(HierarchyUtil.normalizeUserType(user))
+                .areaName(user.getArea() != null ? user.getArea().getName() : null)
+                .zoneName(user.getArea() != null && user.getArea().getZone() != null
+                        ? user.getArea().getZone().getName()
+                        : null)
+                .circleName(user.getArea() != null && user.getArea().getZone() != null
+                        && user.getArea().getZone().getCircle() != null
+                        ? user.getArea().getZone().getCircle().getName()
+                        : null)
+                .clusterName(user.getArea() != null && user.getArea().getZone() != null
+                        && user.getArea().getZone().getCircle() != null
+                        && user.getArea().getZone().getCircle().getCluster() != null
+                        ? user.getArea().getZone().getCircle().getCluster().getName()
+                        : null)
+                .build();
     }
 }

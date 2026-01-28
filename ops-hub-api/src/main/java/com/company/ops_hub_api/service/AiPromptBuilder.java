@@ -23,6 +23,16 @@ public class AiPromptBuilder {
                 .map(entry -> entry.get("role") + ": " + entry.get("content"))
                 .collect(Collectors.joining("\n"));
 
+        String capabilities = String.join(", ",
+                "dashboard summary",
+                "customer status",
+                "allocations",
+                "payments (pending/collected)",
+                "visits",
+                "agent performance",
+                "uploads",
+                "notifications");
+
         return String.join("\n",
                 "SYSTEM:",
                 "You are Ops Hub AI Assistant.",
@@ -30,11 +40,15 @@ public class AiPromptBuilder {
                 "Do not output SQL, queries, or database schema details.",
                 "Do not reveal PII or sensitive identifiers.",
                 "If asked to perform restricted actions, refuse.",
+                "If you do not have data, say what you can answer and suggest a supported topic.",
                 "",
                 "USER CONTEXT:",
                 "Role: " + userType,
                 "Geography: " + geo,
                 "Intent: " + intent.name(),
+                "",
+                "CAPABILITIES:",
+                capabilities,
                 "",
                 "AUTHORIZED BUSINESS SUMMARY:",
                 businessSummary,

@@ -67,6 +67,9 @@ public class ReportService {
     @Transactional(readOnly = true)
     public ReportDTO getReport(Long reportId) {
         checkViewReportsPermission();
+        if (reportId == null) {
+            throw new IllegalArgumentException("Report ID cannot be null");
+        }
         
         Report report = reportRepository.findById(reportId)
                 .orElseThrow(() -> new IllegalArgumentException("Report not found"));
@@ -88,6 +91,9 @@ public class ReportService {
     public ReportDataDTO getReportData(Long reportId, Map<String, Object> parameters, 
                                       Map<String, Object> filters, HttpServletRequest request) {
         checkViewReportsPermission();
+        if (reportId == null) {
+            throw new IllegalArgumentException("Report ID cannot be null");
+        }
         
         Report report = reportRepository.findById(reportId)
                 .orElseThrow(() -> new IllegalArgumentException("Report not found"));
@@ -149,15 +155,13 @@ public class ReportService {
             Query query = entityManager.createNativeQuery(querySql);
             
             // Apply filters if any
-            if (filters != null && !filters.isEmpty()) {
-                applyFilters(query, filters);
-            }
+            applyFilters(query, filters, report);
             
             @SuppressWarnings("unchecked")
             List<Object[]> results = query.getResultList();
             
             // Convert to Map list
-            List<Map<String, Object>> data = convertResultsToMap(results);
+            List<Map<String, Object>> data = convertResultsToMap(results, report);
             
             // Apply post-query filtering if needed
             if (filters != null && !filters.isEmpty()) {
@@ -209,13 +213,23 @@ public class ReportService {
     /**
      * Apply filters to query
      */
-    private void applyFilters(Query query, Map<String, Object> filters) {
-        // This is a simplified version
-        // In production, build proper WHERE clauses based on filter types
-        for (Map.Entry<String, Object> entry : filters.entrySet()) {
-            if (entry.getValue() != null) {
-                query.setParameter(entry.getKey(), entry.getValue());
+    private void applyFilters(Query query, Map<String, Object> filters, Report report) {
+        List<String> filterKeys = resolveFilterKeys(report);
+        if (filterKeys.isEmpty()) {
+            if (filters == null) {
+                return;
             }
+            for (Map.Entry<String, Object> entry : filters.entrySet()) {
+                if (entry.getValue() != null) {
+                    query.setParameter(entry.getKey(), entry.getValue());
+                }
+            }
+            return;
+        }
+
+        Map<String, Object> safeFilters = filters == null ? new HashMap<>() : filters;
+        for (String key : filterKeys) {
+            query.setParameter(key, safeFilters.get(key));
         }
     }
 
@@ -242,22 +256,72 @@ public class ReportService {
     /**
      * Convert query results to Map list
      */
-    private List<Map<String, Object>> convertResultsToMap(List<Object[]> results) {
+    private List<Map<String, Object>> convertResultsToMap(List<Object[]> results, Report report) {
         if (results.isEmpty()) {
             return new ArrayList<>();
         }
-        
-        // Get column names from first result
-        // This is simplified - in production, use proper metadata
+        List<String> columns = resolveReportColumns(report);
         List<Map<String, Object>> data = new ArrayList<>();
         for (Object[] row : results) {
             Map<String, Object> record = new HashMap<>();
             for (int i = 0; i < row.length; i++) {
-                record.put("column" + i, row[i]);
+                String key = (columns != null && i < columns.size()) ? columns.get(i) : "column" + i;
+                record.put(key, row[i]);
             }
             data.add(record);
         }
         return data;
+    }
+
+    private List<String> resolveReportColumns(Report report) {
+        if (report == null || report.getParameters() == null || report.getParameters().isEmpty()) {
+            return null;
+        }
+        try {
+            Map<String, Object> params = objectMapper.readValue(
+                    report.getParameters(),
+                    new TypeReference<Map<String, Object>>() {});
+            Object columnsObj = params.get("columns");
+            if (columnsObj instanceof List<?> list) {
+                List<String> columns = new ArrayList<>();
+                for (Object item : list) {
+                    if (item != null) {
+                        columns.add(item.toString());
+                    }
+                }
+                return columns.isEmpty() ? null : columns;
+            }
+        } catch (Exception e) {
+            log.warn("Failed to parse report columns for {}", report.getReportCode(), e);
+        }
+        return null;
+    }
+
+    private List<String> resolveFilterKeys(Report report) {
+        if (report == null || report.getParameters() == null || report.getParameters().isEmpty()) {
+            return List.of();
+        }
+        try {
+            Map<String, Object> params = objectMapper.readValue(
+                    report.getParameters(),
+                    new TypeReference<Map<String, Object>>() {});
+            Object filtersObj = params.get("filters");
+            if (filtersObj instanceof List<?> list) {
+                List<String> keys = new ArrayList<>();
+                for (Object item : list) {
+                    if (item instanceof Map<?, ?> filter) {
+                        Object key = filter.get("key");
+                        if (key != null) {
+                            keys.add(key.toString());
+                        }
+                    }
+                }
+                return keys;
+            }
+        } catch (Exception e) {
+            log.warn("Failed to parse report filters for {}", report.getReportCode(), e);
+        }
+        return List.of();
     }
 
     /**

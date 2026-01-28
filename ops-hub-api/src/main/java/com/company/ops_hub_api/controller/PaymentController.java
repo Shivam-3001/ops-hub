@@ -91,6 +91,18 @@ public class PaymentController {
                 .collect(Collectors.toList()));
     }
 
+    /**
+     * Manually mark payment as successful after QR collection
+     */
+    @PostMapping("/{paymentReference}/manual-success")
+    @RequiresPermission("COLLECT_PAYMENT")
+    public ResponseEntity<PaymentDTO> markPaymentSuccess(
+            @PathVariable String paymentReference,
+            HttpServletRequest httpRequest) {
+        Payment payment = paymentService.markPaymentSuccess(paymentReference, httpRequest);
+        return ResponseEntity.ok(toDTO(payment));
+    }
+
     private PaymentDTO toDTO(Payment payment) {
         return PaymentDTO.builder()
                 .id(payment.getId())

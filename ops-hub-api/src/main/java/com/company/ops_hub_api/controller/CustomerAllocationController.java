@@ -2,6 +2,7 @@ package com.company.ops_hub_api.controller;
 
 import com.company.ops_hub_api.domain.CustomerAllocation;
 import com.company.ops_hub_api.dto.AllocateCustomerDTO;
+import com.company.ops_hub_api.dto.AssignableUserDTO;
 import com.company.ops_hub_api.dto.CustomerAllocationDTO;
 import com.company.ops_hub_api.dto.ReassignCustomerDTO;
 import com.company.ops_hub_api.security.RequiresPermission;
@@ -108,6 +109,15 @@ public class CustomerAllocationController {
         return ResponseEntity.ok(allocations.stream()
                 .map(this::toDTO)
                 .collect(Collectors.toList()));
+    }
+
+    /**
+     * Get assignable users for the current allocator (next hierarchy level, in scope)
+     */
+    @GetMapping("/assignees")
+    @RequiresPermission("ASSIGN_CUSTOMERS")
+    public ResponseEntity<List<AssignableUserDTO>> getAssignableUsers() {
+        return ResponseEntity.ok(allocationService.getAssignableUsers());
     }
 
     private CustomerAllocationDTO toDTO(CustomerAllocation allocation) {

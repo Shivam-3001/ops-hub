@@ -1,0 +1,5 @@
+customer_name,phone,email,pending_amount,cluster,circle,zone,area,address,store
+Ravi Kumar,9000000101,ravi.kumar+ops2@example.com,15200.75,NORTH,UTTAR_PRADESH,NOIDA,SECTOR_63,"H-12, Sector 63, Noida","Store 63A"
+Meera Singh,9000000102,meera.singh+ops2@example.com,9800.50,NORTH,UTTAR_PRADESH,NOIDA,SECTOR_63,"B-44, Sector 63, Noida","Store 63B"
+Arjun Verma,9000000103,arjun.verma+ops2@example.com,4300.00,NORTH,UTTAR_PRADESH,NOIDA,SECTOR_63,"A-9, Sector 63, Noida","Store 63C"
+Neha Gupta,9000000104,neha.gupta+ops2@example.com,21500.25,NORTH,UTTAR_PRADESH,NOIDA,SECTOR_63,"C-77, Sector 63, Noida","Store 63D"

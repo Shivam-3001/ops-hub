@@ -15,10 +15,12 @@ public interface UserRepository extends JpaRepository<User, Long> {
     List<User> findByAreaId(Long areaId);
     List<User> findByAreaZoneCircleClusterId(Long clusterId);
     List<User> findByAreaZoneId(Long zoneId);
+    List<User> findByAreaZoneIdAndUserType(Long zoneId, String userType);
     boolean existsByEmployeeId(String employeeId);
     boolean existsByUsername(String username);
     boolean existsByEmail(String email);
     List<User> findByAreaZoneCircleId(Long circleId);
     List<User> findByAreaIdAndUserType(Long areaId, String userType);
     List<User> findByAreaZoneCircleIdAndUserType(Long circleId, String userType);
+    List<User> findByAreaZoneCircleClusterIdAndUserType(Long clusterId, String userType);
 }

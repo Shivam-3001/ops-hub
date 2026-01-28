@@ -332,6 +332,81 @@ public class PaymentService {
     }
 
     /**
+     * Manually mark payment as successful (agent confirmation after QR collection)
+     */
+    @Transactional
+    public Payment markPaymentSuccess(String paymentReference, HttpServletRequest httpRequest) {
+        checkPaymentPermission();
+        if (paymentReference == null || paymentReference.isBlank()) {
+            throw new IllegalArgumentException("Payment reference is required");
+        }
+
+        User currentUser = getCurrentUser();
+        String userType = HierarchyUtil.normalizeUserType(currentUser);
+        if (!HierarchyUtil.AGENT.equals(userType)) {
+            throw new AccessDeniedException("Only agents can complete payments");
+        }
+
+        Payment payment = paymentRepository.findByPaymentReference(paymentReference)
+                .orElseThrow(() -> new IllegalArgumentException("Payment not found"));
+
+        if (payment.getUser() == null || payment.getUser().getId() == null
+                || !payment.getUser().getId().equals(currentUser.getId())) {
+            throw new AccessDeniedException("You can only complete your own payments");
+        }
+
+        if ("SUCCESS".equalsIgnoreCase(payment.getPaymentStatus())) {
+            return payment;
+        }
+
+        payment.setPaymentStatus("SUCCESS");
+        payment.setPaymentDate(LocalDateTime.now());
+        payment.setTransactionId(generateTransactionId());
+        Payment savedPayment = paymentRepository.save(payment);
+
+        // Create payment event
+        Map<String, Object> eventData = new HashMap<>();
+        eventData.put("status", "SUCCESS");
+        eventData.put("method", "MANUAL");
+        createPaymentEvent(savedPayment, "MANUAL_SUCCESS", eventData, httpRequest);
+
+        // Reduce pending amount on success
+        Customer paymentCustomer = savedPayment.getCustomer();
+        if (paymentCustomer != null && paymentCustomer.getPendingAmount() != null) {
+            paymentCustomer.setPendingAmount(paymentCustomer.getPendingAmount().subtract(savedPayment.getAmount()));
+            if (paymentCustomer.getPendingAmount().compareTo(java.math.BigDecimal.ZERO) < 0) {
+                paymentCustomer.setPendingAmount(java.math.BigDecimal.ZERO);
+            }
+            customerRepository.save(paymentCustomer);
+            updateCustomerStatusFromPayment(paymentCustomer);
+        }
+
+        // Log audit
+        Long paymentId = savedPayment.getId();
+        if (paymentId != null) {
+            Map<String, Object> newValues = new HashMap<>();
+            newValues.put("paymentStatus", savedPayment.getPaymentStatus());
+            newValues.put("paymentDate", savedPayment.getPaymentDate());
+            newValues.put("transactionId", savedPayment.getTransactionId());
+            auditLogService.logAction("PAYMENT_COMPLETED", "PAYMENT", paymentId,
+                    null, newValues, httpRequest);
+        }
+
+        notificationService.notifyUser(
+                currentUser,
+                "PAYMENT",
+                "Payment completed",
+                String.format("Payment %s completed for customer %s.", paymentReference,
+                        savedPayment.getCustomer() != null ? savedPayment.getCustomer().getCustomerCode() : ""),
+                "PAYMENT",
+                savedPayment.getId(),
+                "INFO"
+        );
+
+        return savedPayment;
+    }
+
+    /**
      * Get payment by reference
      */
     @Transactional(readOnly = true)

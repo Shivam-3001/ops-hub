@@ -2,14 +2,22 @@ package com.company.ops_hub_api.controller;
 
 import com.company.ops_hub_api.dto.*;
 import com.company.ops_hub_api.security.RequiresPermission;
+import com.company.ops_hub_api.domain.ReportExport;
 import com.company.ops_hub_api.service.ExportService;
 import com.company.ops_hub_api.service.ReportService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.core.io.FileSystemResource;
+import org.springframework.core.io.Resource;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.List;
 import java.util.Map;
 
@@ -121,9 +129,30 @@ public class ReportController {
      */
     @RequiresPermission("VIEW_REPORTS")
     @GetMapping("/exports/{exportId}/download")
-    public ResponseEntity<?> downloadExport(@PathVariable Long exportId) {
-        // TODO: Implement file download
-        // This would stream the file from the file system
-        return ResponseEntity.notFound().build();
+    public ResponseEntity<Resource> downloadExport(@PathVariable Long exportId) {
+        ReportExport export = exportService.getExportForDownload(exportId);
+        String filePathValue = export.getFilePath();
+        if (filePathValue == null || filePathValue.isBlank()) {
+            return ResponseEntity.notFound().build();
+        }
+        try {
+            Path filePath = java.util.Objects.requireNonNull(Paths.get(filePathValue));
+            if (!Files.exists(filePath)) {
+                return ResponseEntity.notFound().build();
+            }
+            Resource resource = new FileSystemResource(filePath);
+            String fileName = export.getFileName() != null && !export.getFileName().isBlank()
+                    ? export.getFileName()
+                    : filePath.getFileName().toString();
+            long size = Files.size(filePath);
+            MediaType contentType = java.util.Objects.requireNonNull(MediaType.APPLICATION_OCTET_STREAM);
+            return ResponseEntity.ok()
+                    .contentType(contentType)
+                    .contentLength(size)
+                    .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + fileName + "\"")
+                    .body(resource);
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().build();
+        }
     }
 }

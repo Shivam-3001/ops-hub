@@ -7,19 +7,24 @@ import api from "@/lib/api";
 
 export default function PaymentsPage() {
   const [payments, setPayments] = useState([]);
+  const [customers, setCustomers] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [showInitiateModal, setShowInitiateModal] = useState(false);
+  const [showQrModal, setShowQrModal] = useState(false);
+  const [paymentSession, setPaymentSession] = useState(null);
+  const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [formData, setFormData] = useState({
     customerId: "",
     amount: "",
     paymentMethod: "UPI",
-    upiId: "",
+    upiId: "avastino@ybl",
     currency: "INR",
   });
 
   useEffect(() => {
     loadPayments();
+    loadCustomers();
   }, []);
 
   const loadPayments = async () => {
@@ -36,6 +41,29 @@ export default function PaymentsPage() {
     }
   };
 
+  const loadCustomers = async () => {
+    try {
+      const data = await api.getMyAllocations();
+      const mapped = (data || []).map((alloc) => alloc.customer || alloc);
+      setCustomers(mapped);
+    } catch (err) {
+      console.error("Error loading customers:", err);
+    }
+  };
+
+  const handleCustomerChange = (value) => {
+    const customer = customers.find((item) => String(item.id) === String(value));
+    setSelectedCustomer(customer || null);
+    setFormData({
+      ...formData,
+      customerId: value,
+      amount: customer?.pendingAmount ?? "",
+      paymentMethod: "UPI",
+      upiId: "avastino@ybl",
+      currency: "INR",
+    });
+  };
+
   const handleInitiatePayment = async (e) => {
     e.preventDefault();
     try {
@@ -45,12 +73,52 @@ export default function PaymentsPage() {
         amount: parseFloat(formData.amount),
       });
       setShowInitiateModal(false);
-      setFormData({ customerId: "", amount: "", paymentMethod: "UPI", upiId: "", currency: "INR" });
-      loadPayments();
-      alert("Payment initiated successfully!");
+      setPaymentSession(response);
+      setShowQrModal(true);
     } catch (err) {
       alert(err.message || "Failed to initiate payment");
     }
+  };
+
+  const handleConfirmSuccess = async () => {
+    if (!paymentSession?.paymentReference) {
+      return;
+    }
+    try {
+      await api.markPaymentSuccess(paymentSession.paymentReference);
+      setShowQrModal(false);
+      setPaymentSession(null);
+      setSelectedCustomer(null);
+      setFormData({
+        customerId: "",
+        amount: "",
+        paymentMethod: "UPI",
+        upiId: "avastino@ybl",
+        currency: "INR",
+      });
+      loadPayments();
+      alert("Payment completed successfully!");
+    } catch (err) {
+      alert(err.message || "Failed to complete payment");
+    }
+  };
+
+  const handleCancelQr = () => {
+    setShowQrModal(false);
+    setPaymentSession(null);
+  };
+
+  const buildUpiQrValue = () => {
+    const amount = formData.amount || paymentSession?.amount;
+    const reference = paymentSession?.paymentReference || "";
+    const params = new URLSearchParams({
+      pa: "avastino@ybl",
+      pn: "OpsHub",
+      cu: "INR",
+      am: amount ? String(amount) : "",
+      tn: reference,
+    });
+    return `upi://pay?${params.toString()}`;
   };
 
   const getStatusColor = (status) => {
@@ -194,17 +262,42 @@ export default function PaymentsPage() {
                 <h3 className="text-xl font-bold text-slate-900 mb-4">Initiate Payment</h3>
                 <form onSubmit={handleInitiatePayment} className="space-y-4">
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-2">
-                      Customer ID
-                    </label>
-                    <input
-                      type="number"
+                    <label className="block text-sm font-medium text-slate-700 mb-2">Customer</label>
+                    <select
                       required
                       value={formData.customerId}
-                      onChange={(e) => setFormData({ ...formData, customerId: e.target.value })}
+                      onChange={(e) => handleCustomerChange(e.target.value)}
                       className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-900 focus:border-transparent outline-none"
-                    />
+                    >
+                      <option value="">Select customer</option>
+                      {customers.map((customer) => (
+                        <option key={customer.id} value={customer.id}>
+                          {customer.customerCode} - {customer.firstName} {customer.lastName}
+                        </option>
+                      ))}
+                    </select>
+                    {!customers.length && (
+                      <p className="mt-2 text-xs text-amber-600">
+                        No assigned customers available for payment.
+                      </p>
+                    )}
                   </div>
+                  {selectedCustomer && (
+                    <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">
+                      <div className="flex justify-between py-1">
+                        <span className="font-medium text-slate-700">Pending Amount</span>
+                        <span>{selectedCustomer.pendingAmount ?? "N/A"}</span>
+                      </div>
+                      <div className="flex justify-between py-1">
+                        <span className="font-medium text-slate-700">Area</span>
+                        <span>{selectedCustomer.area?.name || "N/A"}</span>
+                      </div>
+                      <div className="flex justify-between py-1">
+                        <span className="font-medium text-slate-700">Status</span>
+                        <span>{selectedCustomer.status || "N/A"}</span>
+                      </div>
+                    </div>
+                  )}
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-2">Amount</label>
                     <input
@@ -214,6 +307,7 @@ export default function PaymentsPage() {
                       value={formData.amount}
                       onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
                       className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-900 focus:border-transparent outline-none"
+                      readOnly
                     />
                   </div>
                   <div>
@@ -235,9 +329,9 @@ export default function PaymentsPage() {
                         type="text"
                         required
                         value={formData.upiId}
-                        onChange={(e) => setFormData({ ...formData, upiId: e.target.value })}
                         className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-900 focus:border-transparent outline-none"
                         placeholder="user@upi"
+                        readOnly
                       />
                     </div>
                   )}
@@ -252,11 +346,60 @@ export default function PaymentsPage() {
                     <button
                       type="submit"
                       className="flex-1 px-4 py-2 bg-slate-900 text-white rounded-lg hover:bg-slate-800 transition-colors"
+                      disabled={!formData.customerId}
                     >
                       Initiate
                     </button>
                   </div>
                 </form>
+              </div>
+            </div>
+          )}
+
+          {/* QR Payment Modal */}
+          {showQrModal && paymentSession && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+              <div className="bg-white rounded-xl p-6 max-w-md w-full mx-4">
+                <h3 className="text-xl font-bold text-slate-900 mb-4">Scan & Pay</h3>
+                <div className="space-y-4 text-sm text-slate-600">
+                  <div className="flex justify-between">
+                    <span className="font-medium text-slate-700">Reference</span>
+                    <span>{paymentSession.paymentReference}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="font-medium text-slate-700">Amount</span>
+                    <span>{paymentSession.amount} {paymentSession.currency}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="font-medium text-slate-700">UPI ID</span>
+                    <span>avastino@ybl</span>
+                  </div>
+                </div>
+                <div className="mt-6 flex justify-center">
+                  <img
+                    src={`https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(
+                      buildUpiQrValue()
+                    )}`}
+                    alt="UPI QR"
+                    className="h-56 w-56 rounded-lg border border-slate-200"
+                  />
+                </div>
+                <div className="flex gap-3 pt-6">
+                  <button
+                    type="button"
+                    onClick={handleCancelQr}
+                    className="flex-1 px-4 py-2 border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleConfirmSuccess}
+                    className="flex-1 px-4 py-2 bg-slate-900 text-white rounded-lg hover:bg-slate-800 transition-colors"
+                  >
+                    Success
+                  </button>
+                </div>
               </div>
             </div>
           )}

@@ -11,6 +11,43 @@ public class AiIntentDetector {
         }
         String normalized = question.trim().toLowerCase();
         if (containsAny(normalized,
+                "upload",
+                "uploads",
+                "excel",
+                "csv",
+                "import",
+                "bulk upload")) {
+            return AiIntent.UPLOADS_SUMMARY;
+        }
+        if (containsAny(normalized,
+                "notification",
+                "notifications",
+                "alert",
+                "alerts",
+                "escalation",
+                "escalations")) {
+            return AiIntent.NOTIFICATIONS_SUMMARY;
+        }
+        if (containsAny(normalized,
+                "allocation",
+                "allocations",
+                "assign",
+                "assignment",
+                "assigned",
+                "unassigned")) {
+            return AiIntent.ALLOCATION_SUMMARY;
+        }
+        if (containsAny(normalized,
+                "customer",
+                "customers",
+                "delinquent",
+                "portfolio",
+                "bucket",
+                "customer status",
+                "customer summary")) {
+            return AiIntent.CUSTOMER_STATUS_SUMMARY;
+        }
+        if (containsAny(normalized,
                 "pending payment",
                 "pending payments",
                 "pending amount",
@@ -30,6 +67,16 @@ public class AiIntentDetector {
                 "payment totals",
                 "outstanding")) {
             return AiIntent.PENDING_PAYMENTS_SUMMARY;
+        }
+        if (containsAny(normalized,
+                "paid",
+                "successful payments",
+                "collections done",
+                "payment success",
+                "payments success",
+                "payment received",
+                "payments received")) {
+            return AiIntent.PAYMENTS_SUMMARY;
         }
         if (containsAny(normalized,
                 "agent performance",
@@ -57,6 +104,15 @@ public class AiIntentDetector {
                 "follow up",
                 "followup")) {
             return AiIntent.VISIT_SUMMARY;
+        }
+        if (containsAny(normalized,
+                "summary",
+                "overview",
+                "dashboard",
+                "snapshot",
+                "status overview",
+                "health check")) {
+            return AiIntent.GENERAL_SUMMARY;
         }
         return AiIntent.UNKNOWN;
     }

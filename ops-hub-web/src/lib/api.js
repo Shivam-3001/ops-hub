@@ -117,8 +117,15 @@ class ApiClient {
         }
         throw new Error(error.message || `Request failed: ${response.statusText}`);
       }
-
-      return response.json();
+      const responseText = await response.text();
+      const contentType = response.headers.get("content-type") || "";
+      if (!responseText) {
+        return null;
+      }
+      if (contentType.includes("application/json") || responseText.trim().startsWith("{") || responseText.trim().startsWith("[")) {
+        return this.safeJsonParse(responseText, "Invalid server response");
+      }
+      return responseText;
     } catch (error) {
       console.error('API request failed:', error);
       throw error;
@@ -295,6 +302,15 @@ class ApiClient {
     try {
       return JSON.parse(trimmed);
     } catch (error) {
+      const firstBracket = trimmed.indexOf('[');
+      const lastBracket = trimmed.lastIndexOf(']');
+      if (firstBracket >= 0 && lastBracket > firstBracket) {
+        try {
+          return JSON.parse(trimmed.slice(firstBracket, lastBracket + 1));
+        } catch (innerError) {
+          // fallthrough to object parsing
+        }
+      }
       const firstBrace = trimmed.indexOf('{');
       const lastBrace = trimmed.lastIndexOf('}');
       if (firstBrace >= 0 && lastBrace > firstBrace) {
@@ -320,6 +336,10 @@ class ApiClient {
 
   async getAllActiveAllocations() {
     return this.request('/customer-allocations');
+  }
+
+  async getAssignableUsers() {
+    return this.request('/customer-allocations/assignees');
   }
 
   async getMyAllocations() {
@@ -413,6 +433,12 @@ class ApiClient {
     return this.request('/payments/my-payments');
   }
 
+  async markPaymentSuccess(paymentReference) {
+    return this.request(`/payments/${paymentReference}/manual-success`, {
+      method: 'POST',
+    });
+  }
+
   async getCustomerPayments(customerId) {
     return this.request(`/payments/customers/${customerId}`);
   }
@@ -437,9 +463,14 @@ class ApiClient {
   // ==================== Exports ====================
 
   async requestExport(data) {
+    const payload = { ...data };
+    if (!payload.exportFormat && payload.format) {
+      payload.exportFormat = payload.format;
+      delete payload.format;
+    }
     return this.request('/reports/exports', {
       method: 'POST',
-      body: JSON.stringify(data),
+      body: JSON.stringify(payload),
     });
   }
 

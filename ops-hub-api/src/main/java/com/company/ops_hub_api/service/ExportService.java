@@ -56,9 +56,16 @@ public class ExportService {
     public ReportExportDTO requestExport(ExportReportRequestDTO request, HttpServletRequest httpRequest) {
         // Check export permission
         checkExportPermission();
+        if (request == null) {
+            throw new IllegalArgumentException("Report ID cannot be null");
+        }
+        Long reportId = request.getReportId();
+        if (reportId == null) {
+            throw new IllegalArgumentException("Report ID cannot be null");
+        }
         
         // Get report
-        Report report = reportRepository.findById(request.getReportId())
+        Report report = reportRepository.findById(reportId)
                 .orElseThrow(() -> new IllegalArgumentException("Report not found"));
         
         // Get current user
@@ -108,6 +115,10 @@ public class ExportService {
     @Async
     @Transactional
     public void exportAsync(Long exportId, ExportReportRequestDTO request) {
+        if (exportId == null) {
+            log.error("Export ID cannot be null");
+            return;
+        }
         try {
             ReportExport export = exportRepository.findById(exportId)
                     .orElseThrow(() -> new IllegalArgumentException("Export not found"));
@@ -154,8 +165,7 @@ public class ExportService {
             
         } catch (Exception e) {
             log.error("Error exporting report {}", exportId, e);
-            
-            ReportExport export = exportRepository.findById(exportId).orElse(null);
+            ReportExport export = exportId == null ? null : exportRepository.findById(exportId).orElse(null);
             if (export != null) {
                 export.setExportStatus("FAILED");
                 export.setCompletedAt(LocalDateTime.now());
@@ -329,6 +339,16 @@ public class ExportService {
         return exports.stream()
                 .map(this::toDTO)
                 .toList();
+    }
+
+    /**
+     * Get export entity for download (ensures ownership and access).
+     */
+    @Transactional(readOnly = true)
+    public ReportExport getExportForDownload(Long exportId) {
+        User user = getCurrentUser();
+        return exportRepository.findByIdAndExportedById(exportId, user.getId())
+                .orElseThrow(() -> new IllegalArgumentException("Export not found"));
     }
 
     private void checkExportPermission() {

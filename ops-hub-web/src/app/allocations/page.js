@@ -4,8 +4,10 @@ import { useState, useEffect } from "react";
 import AppLayout from "@/components/Layout/AppLayout";
 import PermissionGuard from "@/components/PermissionGuard";
 import api from "@/lib/api";
+import { useAuth } from "@/contexts/AuthContext";
 
 export default function AllocationsPage() {
+  const { user, hasPermission, permissions } = useAuth();
   const [allocations, setAllocations] = useState([]);
   const [customers, setCustomers] = useState([]);
   const [users, setUsers] = useState([]);
@@ -21,15 +23,23 @@ export default function AllocationsPage() {
   });
 
   useEffect(() => {
+    if (!user) {
+      return;
+    }
     loadAllocations();
     loadCustomers();
     loadUsers();
-  }, []);
+  }, [user, permissions]);
 
   const loadAllocations = async () => {
     try {
       setIsLoading(true);
-      const data = await api.getMyAllocations();
+      const normalizedType = user?.userType?.toUpperCase?.() || "";
+      const isAgent = normalizedType === "AGENT" || normalizedType === "FIELD_AGENT";
+      const data =
+        hasPermission("ASSIGN_CUSTOMERS") && !isAgent
+          ? await api.getAllActiveAllocations()
+          : await api.getMyAllocations();
       setAllocations(data);
       setError(null);
     } catch (err) {
@@ -51,12 +61,24 @@ export default function AllocationsPage() {
 
   const loadUsers = async () => {
     try {
-      // Note: This would require a users endpoint
-      // For now, we'll use a placeholder
-      setUsers([]);
+      if (!hasPermission("ASSIGN_CUSTOMERS")) {
+        setUsers([]);
+        return;
+      }
+      const data = await api.getAssignableUsers();
+      setUsers(data || []);
     } catch (err) {
       console.error("Error loading users:", err);
     }
+  };
+
+  const handleAssigneeChange = (value) => {
+    const selectedUser = users.find((option) => String(option.id) === String(value));
+    setFormData({
+      ...formData,
+      userId: value,
+      roleCode: selectedUser?.userType || "",
+    });
   };
 
   const handleAllocate = async (e) => {
@@ -83,8 +105,16 @@ export default function AllocationsPage() {
           {/* Header Actions */}
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="text-2xl font-bold text-slate-900">My Allocations</h2>
-              <p className="text-slate-600 mt-1">Customers assigned to you</p>
+              <h2 className="text-2xl font-bold text-slate-900">
+                {user?.userType?.toUpperCase?.() === "AGENT"
+                  ? "My Allocations"
+                  : "Allocations in Scope"}
+              </h2>
+              <p className="text-slate-600 mt-1">
+                {user?.userType?.toUpperCase?.() === "AGENT"
+                  ? "Customers assigned to you"
+                  : "Active allocations across your hierarchy scope"}
+              </p>
             </div>
             <button
               onClick={() => setShowAllocateModal(true)}
@@ -195,18 +225,27 @@ export default function AllocationsPage() {
                     </select>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-2">User ID</label>
-                    <input
-                      type="number"
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      Assign To
+                    </label>
+                    <select
                       required
                       value={formData.userId}
-                      onChange={(e) => setFormData({ ...formData, userId: e.target.value })}
+                      onChange={(e) => handleAssigneeChange(e.target.value)}
                       className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-900 focus:border-transparent outline-none"
-                      placeholder="Enter user ID"
-                    />
-                    <p className="text-xs text-slate-500 mt-1">
-                      Note: User selection dropdown coming soon
-                    </p>
+                    >
+                      <option value="">Select user</option>
+                      {users.map((option) => (
+                        <option key={option.id} value={option.id}>
+                          {option.fullName || option.username || option.employeeId} ({option.userType})
+                        </option>
+                      ))}
+                    </select>
+                    {!users.length && (
+                      <p className="mt-2 text-xs text-amber-600">
+                        No assignable users found in your scope.
+                      </p>
+                    )}
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-2">Role Code</label>
@@ -216,7 +255,7 @@ export default function AllocationsPage() {
                       value={formData.roleCode}
                       onChange={(e) => setFormData({ ...formData, roleCode: e.target.value })}
                       className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-900 focus:border-transparent outline-none"
-                      placeholder="e.g., COLLECTOR"
+                      placeholder="Auto-filled based on selected user"
                     />
                   </div>
                   <div className="flex gap-3 pt-4">
